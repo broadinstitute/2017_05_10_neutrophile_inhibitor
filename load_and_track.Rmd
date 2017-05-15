@@ -1,0 +1,72 @@
+---
+title: "load_data"
+author: "TB"
+date: "5/15/2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("readr")
+library("tibble")
+library("dplyr")
+library("tidyr")
+library("stringr")
+library("ggplot2")
+library("purrr")
+library("broom")
+library("dplyr")
+library("tsne")
+library("ggfortify")
+library("cluster")
+library('magrittr')
+# load cytominer 
+
+```
+
+# Load CP lap data and cytominer::track the data
+The CP data set was tracked using the CP overlap tracking and the CP LAP tracking. 
+Unfortunately, the LAP tracking has a bug and failed to track 50% of the data. 
+
+The following code loads the data and tracks the neutrophils and corrects the values 
+of the column 'Metadata_condition' from SP to SP17 and from CP to CP17
+
+```{r}
+csv_in_name <- 'TrackeddetectedNeutros.csv'
+csv_tracks_name <- 'tracks.csv'
+data_dir_lap <- '../../analysis/2017_05_10_neutrophils_cp17_sp17/'
+data_dir <- '../../analysis/2017_05_10_neutrophils_cp17_sp17_no_lap/'
+strata <- c('Metadata_condition','Metadata_dose','Metadata_id','Metadata_date','Metadata_matrix')
+
+track_data <- function(data_dir, csv_in_name, strata, track_label) {
+  df <- data_frame()
+  for (iDir in list.dirs(data_dir)) {
+    file_name <-  file.path(iDir, csv_in_name)
+    if (file.exists(file_name)) {
+      df <- rbind(df,suppressMessages(read_csv(file_name)))
+    }
+  }
+  strata2 <-  c(strata,track_label)
+  
+  return(
+    df %>% 
+      rename(Metadata_timePoint = Metadata_frame) %>%
+      group_by_(.dots = strata2) %>%
+      arrange(Metadata_timePoint) %>%
+      cytominer::track(.,strata2) %>%
+      group_by_(.dots = strata) 
+  )
+}
+
+tracks_cp_lap <- track_data(data_dir_lap, csv_in_name, strata, 'TrackObjects_Label')
+tracks_cp_lap$Metadata_condition[tracks_cp_lap$Metadata_condition == "SP"] <- "SP17"
+tracks_cp_lap$Metadata_condition[tracks_cp_lap$Metadata_condition == "CP"] <- "CP17"
+write_csv(tracks_cp_lap,file.path(data_dir_lap, csv_tracks_name))
+
+tracks_cp <- track_data(data_dir, csv_in_name, strata, 'TrackObjects_Label_50')
+tracks_cp$Metadata_condition[tracks_cp$Metadata_condition == "SP"] <- "SP17"
+tracks_cp$Metadata_condition[tracks_cp$Metadata_condition == "CP"] <- "CP17"
+write_csv(tracks_cp,file.path(data_dir, csv_tracks_name))
+
+```
+

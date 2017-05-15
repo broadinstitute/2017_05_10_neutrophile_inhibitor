@@ -1,0 +1,85 @@
+---
+title: "load_data"
+author: "TB"
+date: "5/15/2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("readr")
+library("tibble")
+library("dplyr")
+library("tidyr")
+library("stringr")
+library("ggplot2")
+library("purrr")
+library("broom")
+library("dplyr")
+library("tsne")
+library("ggfortify")
+library("cluster")
+library('magrittr')
+# load cytominer 
+
+```
+
+# Load CP lap data and cytominer::track the data
+```{r}
+
+data_dir_lap <- '../../analysis/2017_05_10_neutrophils_cp17_sp17/'
+data_dir <- '../../analysis/2017_05_10_neutrophils_cp17_sp17_no_lap/'
+csv_tracks_name <- 'tracks.csv'
+
+strata <- c('Metadata_condition','Metadata_dose','Metadata_id','Metadata_date','Metadata_matrix')
+
+tracks_cp_lap <- suppressMessages(read_csv(file.path(data_dir_lap, csv_tracks_name))) %>% 
+  group_by_(.dots = strata)
+
+tracks_cp <- read_csv(file.path(data_dir, csv_tracks_name)) %>% 
+  group_by_(.dots = strata)
+
+
+track_quality_cp_lap <- cytominer::assess(tracks_cp_lap, 20, track_metadata) 
+track_quality_cp <- cytominer::assess(tracks_cp, 20, track_metadata)
+
+track_quality_cp[is.na(track_quality_cp)] <- 0
+track_quality_cp_lap[is.na(track_quality_cp_lap)] <- 0
+
+```
+```{r}
+track_quality_cp %<>% 
+  mutate(Metadata = paste(Metadata_condition, Metadata_dose, Metadata_id, Metadata_date)) %>%
+  mutate(Metadata_track_method = 'overlap') 
+
+track_quality_cp_lap %<>% 
+  mutate(Metadata = paste(Metadata_condition, Metadata_dose, Metadata_id, Metadata_date)) %>%
+  mutate(Metadata_track_method = 'lap') 
+
+common_data <- intersect(track_quality_cp %>% select(Metadata),
+                         track_quality_cp_lap %>% select(Metadata))
+
+
+df <- left_join(track_quality_cp, track_quality_cp_lap, by = strata, suffix = c('_overlap', '_LAP'))
+
+ggplot(data = df, aes(x = VOT_overlap, y = VOT_LAP, color = Metadata_condition)) +
+  geom_point() +
+  coord_fixed()
+
+ggplot(data = df, aes(x = Exp_Valid_Tracks_overlap, y = Exp_Valid_Tracks_LAP, color = Metadata_condition)) +
+  geom_point() +
+  coord_fixed()
+
+ggplot(data = df, aes(x = sum_track_overlap, y = sum_track_LAP, color = Metadata_condition)) +
+  geom_point() +
+  coord_fixed()
+
+```
+
+# Selecting the worst data points
+```{r}
+track_quality_cp %>% 
+  arrange(VOT,desc(Exp_Tracks)) %>% 
+  print
+
+```
