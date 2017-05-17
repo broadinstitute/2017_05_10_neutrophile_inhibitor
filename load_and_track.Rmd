@@ -34,8 +34,9 @@ of the column 'Metadata_condition' from SP to SP17 and from CP to CP17
 ```{r}
 csv_in_name <- 'TrackeddetectedNeutros.csv'
 csv_tracks_name <- 'tracks.csv'
-data_dir_lap <- '../../analysis/2017_05_10_neutrophils_cp17_sp17/'
-data_dir <- '../../analysis/2017_05_10_neutrophils_cp17_sp17_no_lap/'
+data_dir <- '../../analysis/2017_05_10_neutrophils_cp17_sp17/'
+data_dir_no_lap <- '../../analysis/2017_05_10_neutrophils_cp17_sp17_no_lap/'
+data_dir_no_lap_smooth <- '../../analysis/2017_05_10_neutrophils_cp17_sp17_no_lap_smooth/'
 strata <- c('Metadata_condition','Metadata_dose','Metadata_id','Metadata_date','Metadata_matrix')
 
 track_data <- function(data_dir, csv_in_name, strata, track_label) {
@@ -48,25 +49,29 @@ track_data <- function(data_dir, csv_in_name, strata, track_label) {
   }
   strata2 <-  c(strata,track_label)
   
-  return(
-    df %>% 
-      rename(Metadata_timePoint = Metadata_frame) %>%
-      group_by_(.dots = strata2) %>%
-      arrange(Metadata_timePoint) %>%
-      cytominer::track(.,strata2) %>%
-      group_by_(.dots = strata) 
-  )
+  df %>% 
+    rename(Metadata_timePoint = Metadata_frame) %>%
+    group_by_(.dots = strata2) %>%
+    arrange(Metadata_timePoint) %>%
+    cytominer::track(.,strata2) %>%
+    group_by_(.dots = strata) 
+  
+  df[df == "SP"] <- "SP17"
+  df[df == "CP"] <- "CP17"
+  
+  return(df)
 }
+```
 
-tracks_cp_lap <- track_data(data_dir_lap, csv_in_name, strata, 'TrackObjects_Label')
-tracks_cp_lap$Metadata_condition[tracks_cp_lap$Metadata_condition == "SP"] <- "SP17"
-tracks_cp_lap$Metadata_condition[tracks_cp_lap$Metadata_condition == "CP"] <- "CP17"
-write_csv(tracks_cp_lap,file.path(data_dir_lap, csv_tracks_name))
-
-tracks_cp <- track_data(data_dir, csv_in_name, strata, 'TrackObjects_Label_50')
-tracks_cp$Metadata_condition[tracks_cp$Metadata_condition == "SP"] <- "SP17"
-tracks_cp$Metadata_condition[tracks_cp$Metadata_condition == "CP"] <- "CP17"
+```{r}
+tracks_cp <- track_data(data_dir, csv_in_name, strata, 'TrackObjects_Label')
 write_csv(tracks_cp,file.path(data_dir, csv_tracks_name))
+
+tracks_cp_no_lap <- track_data(data_dir_no_lap, csv_in_name, strata, 'TrackObjects_Label_50')
+write_csv(tracks_cp_no_lap,file.path(data_dir_no_lap, csv_tracks_name))
+
+tracks_cp_no_lap_smooth <- track_data(data_dir_no_lap_smooth, csv_in_name, strata, 'TrackObjects_Label_50')
+write_csv(tracks_cp_no_lap_smooth,file.path(data_dir_no_lap_smooth, csv_tracks_name))
 
 ```
 
