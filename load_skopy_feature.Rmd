@@ -1,0 +1,53 @@
+---
+title: "load_skopy_feature"
+author: "TB"
+date: "5/25/2017"
+output: html_document
+---
+ 
+ 
+```{r setup, include=FALSE}
+library("readr")
+library("tibble")
+library("dplyr")
+library("tidyr")
+library("stringr")
+library("ggplot2")
+library("purrr")
+library("broom")
+library("ggfortify")
+library("cluster")
+library("magrittr")
+library("reshape2")
+library("corrplot")
+library("outliers")
+library("rbenchmark")
+library("robustbase")
+library("DBI")
+```
+
+# define name to skopy sqlite file 
+
+```{r}
+
+## specify sqlite file 
+backend_path <- '/Users/tbecker/Documents/2017_05_22_neutros_sp/workspace/analysis/2014_07_08/label/measurements.sqlite'
+
+## create db connection 
+db <- src_sqlite(path = backend_path)
+
+## table names used by skopy
+tbl_name <- list( "boxes", "correlations", "descriptions", "images", "instances", "intensities", "moments", "shapes")
+
+## function to read all tables using lapply
+db2table <- function(tbl_name,db){
+  tbl(db,tbl_name) %>% collect( n = Inf)
+}
+
+skopy_db <- lapply(tbl_name, FUN = db2table, db = db) 
+
+
+
+
+
+```
