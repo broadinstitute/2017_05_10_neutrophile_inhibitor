@@ -423,7 +423,6 @@ ggplot(data = test_data_normalized %>% filter(Metadata_condition == 'CP17'), aes
 # cluster the data 
 ```{r}
 data <- normalized %>% 
-  select(one_of(c(variables))
-
+  select(one_of(c(variables)))
 corrplot(cor(data))
 ```
