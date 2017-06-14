@@ -1,0 +1,37 @@
+---
+title: "Create Skopy csv"
+output: html_notebook
+---
+
+```{r}
+library("readr")
+library("tibble")
+library("dplyr")
+library("tidyr")
+library("stringr")
+library("purrr")
+library("magrittr")
+```
+
+Skopy is a python tool for feature extraction. Given an cell image and a label mask, 
+each cell is described with many (~700) features. 
+
+We define the image and the label directory. 
+```{r}
+experiment_dir <- '/Users/tbecker/Documents/2017_05_22_neutros_sp'
+image_dir <- file.path(experiment_dir,'2014_07_08/images/C0') 
+label_dir <- file.path(experiment_dir,'workspace/analysis/2014_07_08/label')
+
+csv_out <- file.path(label_dir,'2014_07_08.csv')
+
+image_names <- list.files(image_dir)
+label_names <- list.files(label_dir)
+
+file_list <- data.frame(image = image_names, label = label_names)
+```
+
+Use file.path() to create the path to images / labels and write csv file 
+```{}
+write_csv(file_list %>% mutate(image = file.path(image_dir,image), label = file.path(label_dir, label)), csv_out)
+
+```

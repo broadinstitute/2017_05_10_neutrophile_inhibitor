@@ -1,0 +1,125 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("readr")
+library("tibble")
+library("dplyr")
+library("tidyr")
+library("stringr")
+library("knitr")
+```
+
+# Create Metadata for MATLAB tracking
+Notebook to prepare Metadata file for MATLAB tracking data 
+
+The metadata file for the matlab data is not in the same format as the cell profiler tracking data. Differences: 
+1. The metadata file used for CellProfiler has an Metadata_dose column
+2. The values in the column 'Metdata_condition' in the metadata file used for CellProfiler are 'CP17', 'SP17', 'vehicle' or 'control'
+
+This notebook is used to create one csv file with the tracking results of all time series tracked with MATLAB and the same Metadata as used by CellProfiler. 
+
+```{r}
+# read metadata file available for matlab (old version)
+metadata_matlab <- read_csv('../../load_data_csv/metadata_matlab.csv') 
+
+# read metadata file available for CellProfiler (new version)
+metadata_cp <- read_csv('../../load_data_csv/file_list.csv') %>%
+  print()
+```
+
+The date column is merged from the new Metadata_file. Note that the experiment ID is 
+changed to lower case to enable a join. To unique the data, the group_by followed 
+by an slice(1) is used. The last slice only removes one obsolete entry.
+```{r}
+metadata_date_id <-  metadata_cp %>% 
+  select(Metadata_date, Metadata_id) %>%  
+  mutate(Metadata_id = tolower(Metadata_id)) %>%
+  group_by(Metadata_date, Metadata_id) %>%
+  slice(1) %>% 
+  ungroup %>% 
+  slice(1:17) 
+  
+metadata_matlab %<>% 
+  left_join(.,metadata_date_id, by= "Metadata_id") %>% 
+  mutate(Metadata_dose = Metadata_condition) %>%
+  rename(Metadata_condition2 = Metadata_condition) %>%
+  print
+```
+
+Write CP17 / SP17 values to Metadata_condition; "control" and "vehicle" values are added later. 
+```{r}
+metadata_condition <-  metadata_cp %>% 
+  select(Metadata_date, Metadata_id, Metadata_matrix, Metadata_condition) %>%  
+  mutate(Metadata_id = tolower(Metadata_id)) %>%
+  filter(str_detect(Metadata_condition, 'CP17|SP17')) %>%
+  group_by(Metadata_date, Metadata_id, Metadata_matrix,Metadata_condition) %>%
+  slice(1) %>% 
+  ungroup
+  
+metadata_matlab %<>% 
+  left_join(.,metadata_condition, by= c("Metadata_date", "Metadata_id", "Metadata_matrix")) %>% 
+  print
+```
+
+Now the control and vehicle values are written to the Metadata_condition column. 
+```{r}
+metadata_matlab$Metadata_condition[metadata_matlab$Metadata_dose == "cont"] = 'control'
+metadata_matlab$Metadata_condition[metadata_matlab$Metadata_dose == "vehi"] = 'vehicle'
+metadata_matlab$Metadata_condition[metadata_matlab$Metadata_dose == "water"] = 'water'
+
+metadata_matlab$Metadata_dose[metadata_matlab$Metadata_dose == "cont"] = 'None'
+metadata_matlab$Metadata_dose[metadata_matlab$Metadata_dose == "vehi"] = 'None'
+metadata_matlab$Metadata_dose[metadata_matlab$Metadata_dose == "water"] = 'None'
+```
+
+Arrange columns 
+```{r}
+metadata_matlab %<>%
+  select(Metadata_date, Metadata_id, Metadata_matrix, Metadata_condition,Metadata_dose, everything() ) %>%
+  select(-Metadata_condition2) %>% 
+  print()
+```
+
+The variable metadata_matlab stores the metadata information for all tracking data. Now, we want to combine the 
+metadata with the tracking results stored "featureList.csv". The path for each featureList is stored in the 
+column metadata_matlab$File_Path. 
+
+To merge the metadata with the values in the featureList.csv, we first load all tracking results as one large 
+list with 76 entries. 
+
+
+```{r}
+file_list <- lapply(metadata_matlab$File_Path, function(i){
+  file.path(i,'featureList.csv')
+  })
+
+population <- lapply(file_list, function(i){suppressMessages(read_csv(i))})
+
+```
+The metadata for the population is rewritten as a list. Then, the Map function is used to 
+merge the population and the metadata list. The *do.call()* function is used to merge the list of 
+data frames into one big data frame.
+```{r}
+metadata_list <- split(metadata_matlab, seq(nrow(metadata_matlab)))  
+
+population <- Map(function(x,y){c(x,y)},population,metadata_list) 
+
+population <- do.call(rbind, lapply(population,data.frame))
+```
+
+
+```{r}
+strata <- c('Metadata_condition','Metadata_dose','Metadata_id','Metadata_date','Metadata_matrix')
+
+population %>% group_by_(.dots = strata) %>%
+  select(Metadata_condition,Metadata_dose,Metadata_id,Metadata_date,Metadata_matrix,File_Path) %>%
+  slice(1) %>%
+  print
+#  slice(1)
+
+```
