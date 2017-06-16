@@ -1,0 +1,124 @@
+---
+title: "load_data"
+author: "TB"
+date: "5/15/2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("readr")
+library("tibble")
+library("dplyr")
+library("tidyr")
+library("stringr")
+library("ggplot2")
+library("purrr")
+library("broom")
+library("dplyr")
+library("tsne")
+library("ggfortify")
+library("cluster")
+library("magrittr")
+library("knitr")
+library("corrplot")
+#library("cytominer")
+# load cytominer 
+
+```
+
+# Load data 
+The output of CellProfiler track module is loaded as CSV, tracked using cytominer::track and 
+stored in the data folder as "track.csv". Once the data is stored, the processing is not repeated;
+instead "tracks.csv" is loaded. 
+```{r}
+csv_in <- 'featureList.csv'
+csv_out <- 'tracks.csv'
+data_dir <- '../../analysis/2017_atari_sequence/'
+strata <- c('experimentID')
+
+if (file.exists(file.path(data_dir, csv_out))) {
+  tracks <- read_csv(file.path(data_dir, csv_out))
+} else {
+
+  df <- read_csv(file.path(data_dir, csv_in))
+  df %<>% dplyr::mutate(Metadata_frame = as.double(Metadata_timePoint)) 
+  
+
+  #The data contains tracking data for neutrophils from different conditions. The datasets 
+  #can be ditinguished using the Metadata columns defined in strata. 
+  track_label = c('TrackObjects_Label')
+  
+  tracks <- df %>% 
+    group_by_(.dots =  c(strata,track_label)) %>%
+    arrange(Metadata_timePoint) %>%
+    cytominer::track(., c(strata,track_label)) %>%
+    group_by_(.dots = strata) 
+  }
+```
+
+
+```{r}
+write_csv(tracks, file.path(data_dir, csv_out))
+```
+
+The quality of the tracking can be assessed using the cytominer::assess function. 
+The VOT (valid observation time) column can be used to get a rough estimate of the 
+track quality. 
+```{r}
+tracks %<>% group_by_(.dots = strata)
+
+
+quality <- cytominer::assess(tracks, 19, strata)
+
+quality %<>% full_join(., 
+  tracks %>% 
+    filter(Track_Length > 19) %>%
+    summarise(mean_xFMI = mean(Track_xFMI)), 
+  by = strata)
+  
+#quality[is.na(quality)] <- 0
+quality %>% knitr::kable()
+```
+Select the experiments with a VOT smaller 0.6. Most of these data sets belong to one ID ("GN0033", ie one human donor)
+```{r}
+quality %>% 
+  filter(VOT < 0.6 ) %>% 
+  print
+
+```
+
+
+```{r}
+valid_tracks <- tracks %>%
+  filter(Track_Life_Time > 19)
+
+ggplot(data = valid_tracks, aes(Track_Angle)) +
+   geom_histogram(binwidth = 0.04)
+
+x <- hist(valid_tracks$Track_Angle, plot = FALSE)
+
+```
+
+```{r}
+
+source("windrose.r")
+
+# angles are scaled to the intervale (-pi, pi)
+test_data <- tracks %>%
+  filter(Track_Length > 19) %>%
+  mutate(Track_Angle = Track_Angle + pi/2) %>% # rotate all angles by 90 degree or pi/2
+  mutate(Track_Angle = ifelse(Track_Angle > pi, Track_Angle - 2*pi, Track_Angle) ) %>%
+  mutate(Track_Angle = ifelse(Track_Angle < 0, Track_Angle + 2*pi, Track_Angle) )
+spdmin <- 0
+spdmax <- 16
+spdres <- 1
+dirres <- 90
+
+spdscale <- 1.5638 # factor to convert speed from pixel / frame to mum / min
+
+h1 <- plot.windrose(spd = spdscale * test_data$Track_Speed, dir = (180 * (test_data$Track_Angle) / pi), 
+  spdmin = spdmin, spdmax = spdmax, spdres = spdres, dirres = dirres, title_name = "Migration distribution CP17, all doses")
+
+
+```

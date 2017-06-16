@@ -21,6 +21,7 @@ library("ggfortify")
 library("cluster")
 library("magrittr")
 library("knitr")
+library("corrplot")
 #library("cytominer")
 # load cytominer 
 
@@ -31,13 +32,35 @@ The output of CellProfiler track module is loaded as CSV, tracked using cytomine
 stored in the data folder as "track.csv". Once the data is stored, the processing is not repeated;
 instead "tracks.csv" is loaded. 
 ```{r}
-csv_in <- 'featureList.csv'
+csv_in <- 'TrackeddetectedNeutros.csv'
 csv_out <- 'tracks.csv'
 data_dir <- '../../analysis/2017_04_28_matlab/'
 strata <- c('Metadata_condition','Metadata_dose','Metadata_id','Metadata_date','Metadata_matrix')
 
-tracks <- read_csv(file.path(data_dir, csv_out))
+if (file.exists(file.path(data_dir, csv_out))) {
+  tracks <- read_csv(file.path(data_dir, csv_out))
+} else {
 
+  df <- read_csv(file.path(data_dir, csv_in))
+  df %<>% dplyr::mutate(Metadata_frame = as.double(Metadata_timePoint)) 
+  
+
+  #The data contains tracking data for neutrophils from different conditions. The datasets 
+  #can be ditinguished using the Metadata columns defined in strata. 
+  track_label = c('TrackObjects_Label')
+  
+  tracks <- df %>% 
+    group_by_(.dots =  c(strata,track_label)) %>%
+    arrange(Metadata_timePoint) %>%
+    cytominer::track(., c(strata,track_label)) %>%
+    group_by_(.dots = strata) 
+  }
+```
+
+
+```{r}
+tracks$Metadata_dose[is.na(tracks$Metadata_dose)] <- 'None'
+write_csv(tracks, file.path(data_dir, csv_out))
 ```
 
 The quality of the tracking can be assessed using the cytominer::assess function. 
@@ -45,6 +68,7 @@ The VOT (valid observation time) column can be used to get a rough estimate of t
 track quality. 
 ```{r}
 tracks %<>% group_by_(.dots = strata)
+
 
 quality <- cytominer::assess(tracks, 19, strata)
 
@@ -54,7 +78,7 @@ quality %<>% full_join(.,
     summarise(mean_xFMI = mean(Track_xFMI)), 
   by = strata)
   
-quality[is.na(quality)] <- 0
+#quality[is.na(quality)] <- 0
 quality %>% knitr::kable()
 ```
 Select the experiments with a VOT smaller 0.6. Most of these data sets belong to one ID ("GN0033", ie one human donor)
@@ -64,7 +88,7 @@ quality %>%
   print
 
 quality %>% 
-  filter(Metadata_id == "GN0033") %>% 
+  filter(Metadata_id == "gn0033") %>% 
   print
 ```
 
@@ -243,25 +267,30 @@ test_data <- tracks %>%
 CP17 <- test_data %>% 
   filter(Metadata_condition == "CP17") %>% 
   filter(Metadata_matrix == "FN") %>%
-  filter(Metadata_dose == 50)
+  #filter(Metadata_dose == 50) %>%
+  filter(Track_Life_Time > 19)
 
 SP17 <- test_data %>% 
   filter(Metadata_condition == "SP17") %>% 
   filter(Metadata_matrix == "FN") %>%
-  filter(Metadata_dose == 50)
+  #filter(Metadata_dose == 50) %>%
+  filter(Track_Life_Time > 19)
 
 
 controls <- test_data %>% filter(Metadata_condition == "control")
 vehicle <- test_data %>% filter(Metadata_condition == "vehicle")
 
-plot.windrose(spd = CP17$Track_Speed, dir = (180 * (CP17$Track_Angle) / pi))
-plot.windrose(spd = SP17$Track_Speed, dir = (180 * (SP17$Track_Angle) / pi))
+plot.windrose(spd = CP17$Track_Speed, dir = (180 * (CP17$Track_Angle) / pi), spdmax = 10)
+plot.windrose(spd = SP17$Track_Speed, dir = (180 * (SP17$Track_Angle) / pi), spdmax = 10)
 
-plot.windrose(spd = controls$Track_Speed, dir = (180 * (controls$Track_Angle) / pi))
-plot.windrose(spd = vehicle$Track_Speed, dir = (180 * (vehicle$Track_Angle) / pi))
+plot.windrose(spd = controls$Track_Speed, dir = (180 * (controls$Track_Angle) / pi), spdmax = 10)
+plot.windrose(spd = vehicle$Track_Speed, dir = (180 * (vehicle$Track_Angle) / pi), spdmax = 10)
 ```
 
 ```{r}
+
+tracks_valid <- tracks %>% filter(Track_Length > 19)
+
 summary_speed <- tracks_valid %>% 
   ungroup() %>%
   group_by(Metadata_matrix, Metadata_condition, Metadata_dose) %>%
@@ -270,7 +299,8 @@ summary_speed <- tracks_valid %>%
 summary_speed %>% knitr::kable()
 
 ggplot(data = tracks_valid, aes(x = Track_Speed)) +
-  geom_histogram(binwidth = 1)
+  geom_histogram(binwidth = 0.15) +
+  xlim(0,10)
 
 ```
 # Normalize data
@@ -278,6 +308,7 @@ Data normalization is performed using cytominer::normalize. Normalization is per
 migrations have been run without chemotaxis (no IL-8, i.e. no chemoattractant)
 
 ```{r}
+
 population <- tracks %>% 
   filter(Track_Length > 19) %>% 
   na.omit() %>%
@@ -286,18 +317,158 @@ population <- tracks %>%
 # define values that can be normalized 
 variables <- c("Track_Speed", "Track_Directionality","Track_xFMI","Track_yFMI","Track_Distance_Traveled","Track_Speed_Y","Track_Speed_X")
 
-
+population <- cytominer::generalized_log(population, variables = variables)
 
 normalized <-
   cytominer::normalize(
     population = population,
     variables = variables,
-    strata =  'Metadata_id',
-    sample = population %>% filter(Metadata_condition == 'control')
+    strata =  "Metadata_id",
+    sample = population %>% filter(Metadata_condition == "control"),
+    operation = "robustize"
   )
 
 normalized %<>% dplyr::collect() 
 
+ggplot(data = population, aes(x = Metadata_id, y = Track_xFMI)) +
+  geom_boxplot() 
+
+ggplot(data = population %>% filter(Metadata_condition == "control"), aes(x = Metadata_id, y = Track_xFMI)) +
+  geom_boxplot() 
+
+ggplot(data = population %>% filter(Metadata_condition == "CP17"), aes(x = Metadata_id, y = Track_xFMI)) +
+  geom_boxplot() 
+
+```
+# Normalized vs. not normalized data
+We analyze the effect of the normalization by visalizing different properties of the 
+migration experiments run using Fibronektin
+```{r}
+test_data <-  population %>% 
+  filter(Metadata_matrix == "FN") %>%
+  filter(Metadata_condition != "water")
+
+test_data_normalized <- normalized %>% 
+  filter(Metadata_matrix == "FN") %>%
+  filter(Metadata_condition != "water")
+
+ggplot(data = test_data, aes(x = Metadata_condition, y = Track_xFMI)) +
+  geom_boxplot() +
+  ggtitle("Migration in FN, track length >=20")
+
+ggplot(data = test_data_normalized, aes(x = Metadata_condition, y = Track_xFMI)) +
+  geom_boxplot() +
+  ggtitle("Migration in FN, track length >=20, normalized")
+```
+
+# Directionality
+```{r}
+ggplot(data = test_data, aes(x = Track_Directionality,fill = Metadata_condition)) + 
+  geom_histogram(binwidth = 0.05) +
+  ggtitle("Migration in FN, track length >=20")
+
+ggplot(data = test_data_normalized, aes(x = Track_Directionality,fill = Metadata_condition)) + 
+  geom_histogram(binwidth = 0.05) +
+  ggtitle("Migration in FN, track length >=20, normalized")
 
 ```
 
+
+
+# x forward migration index 
+```{r}
+ggplot(data = test_data, aes(x = Track_xFMI,fill = Metadata_condition)) + 
+  geom_histogram(binwidth = 0.1) +
+  ggtitle("Migration in FN, track length >=20")
+
+ggplot(data = test_data, aes(x = Track_xFMI,colour = Metadata_condition)) + 
+  geom_freqpoly(binwidth = 0.1) +
+  ggtitle("Migration in FN, track length >=20")
+
+ggplot(data = test_data_normalized, aes(x = Track_xFMI,fill = Metadata_condition)) + 
+  geom_histogram(binwidth = 0.5) +
+  ggtitle("Migration in FN, track length >=20, normalized")
+
+ggplot(data = test_data_normalized, aes(x = Track_xFMI,colour = Metadata_condition)) + 
+  geom_freqpoly(binwidth = 0.5) +
+  ggtitle("Migration in FN, track length >=20, normalized")
+
+```
+
+# x forward migration index 
+```{r}
+ggplot(data = test_data, aes(x = Track_yFMI,fill = Metadata_condition)) + 
+  geom_histogram(binwidth = 0.1) +
+  ggtitle("Migration in FN, track length >=20")
+
+ggplot(data = test_data, aes(x = Track_yFMI,colour = Metadata_condition)) + 
+  geom_freqpoly(binwidth = 0.1) +
+  ggtitle("Migration in FN, track length >=20")
+
+ggplot(data = test_data_normalized, aes(x = Track_yFMI,fill = Metadata_condition)) + 
+  geom_histogram(binwidth = 0.5) +
+  ggtitle("Migration in FN, track length >=20, normalized")
+
+ggplot(data = test_data_normalized, aes(x = Track_yFMI,colour = Metadata_condition)) + 
+  geom_freqpoly(binwidth = 0.5) +
+  ggtitle("Migration in FN, track length >=20, normalized")
+
+```
+
+```{r}
+
+ggplot(data = test_data %>% filter(Metadata_condition != 'vehicle'), aes(x = Track_xFMI, y = Track_CI)) +
+  geom_point(aes(colour = Metadata_condition)) +
+  ggtitle("Migration in FN, track length >=20")
+  
+ggplot(data = test_data_normalized %>% filter(Metadata_condition != 'vehicle'), aes(x = Track_xFMI, y = Track_CI)) +
+  geom_point(aes(colour = Metadata_condition))  +
+  ggtitle("Migration in FN, track length >=20, normalized")
+```
+
+
+```{r}
+ggplot(data = test_data_normalized %>% filter(Metadata_condition == 'CP17'), aes(x = factor(Track_Sector), y = Track_xFMI)) +
+  geom_boxplot() +
+  ggtitle("Migration in FN, track length >=20, normalized")
+
+ggplot(data = test_data_normalized %>% filter(Metadata_condition == 'control'), aes(x = factor(Track_Sector), y = Track_xFMI)) +
+  geom_boxplot( ) +
+  ggtitle("Migration in FN, track length >=20, normalized")
+```
+
+```{r}
+ggplot(data = test_data_normalized %>% filter(Metadata_condition == 'CP17'), aes(x = factor(Track_Sector), y = Track_CI)) +
+  geom_boxplot() +
+  ggtitle("Migration in FN, track length >=20, normalized")
+
+ggplot(data = test_data_normalized %>% filter(Metadata_condition == 'control'), aes(x = factor(Track_Sector), y = Track_CI)) +
+  geom_boxplot( ) +
+  ggtitle("Migration in FN, track length >=20, normalized")
+
+ggplot(data = test_data_normalized %>% filter(Metadata_condition == 'SP17'), aes(x = factor(Track_Sector), y = Track_CI)) +
+  geom_boxplot() +
+  ggtitle("Migration in FN, track length >=20, normalized")
+
+ggplot(data = test_data_normalized %>% filter(Metadata_condition == 'vehicle'), aes(x = factor(Track_Sector), y = Track_CI)) +
+  geom_boxplot( ) +
+  ggtitle("Migration in FN, track length >=20, normalized")
+```
+
+
+```{r}
+ggplot(data = test_data_normalized %>% filter(Metadata_condition == 'control'), aes(x = Metadata_id, y = Track_xFMI)) +
+  geom_boxplot( outlier.shape = NA) +
+  ggtitle("Migration in FN, track length >=20, normalized")
+
+ggplot(data = test_data_normalized %>% filter(Metadata_condition == 'CP17'), aes(x = Metadata_id, y = Track_xFMI)) +
+  geom_boxplot( outlier.shape = NA) +
+  ggtitle("Migration in FN, track length >=20, normalized")
+```
+# cluster the data 
+```{r}
+data <- normalized %>% 
+  select(one_of(c(variables)))
+
+corrplot(cor(data))
+```

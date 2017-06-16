@@ -1,6 +1,8 @@
 ---
 title: "R Notebook"
-output: html_notebook
+output:
+  html_document: default
+  html_notebook: default
 ---
 
 
@@ -25,11 +27,14 @@ This notebook is used to create one csv file with the tracking results of all ti
 
 ```{r}
 # read metadata file available for matlab (old version)
-metadata_matlab <- read_csv('../../load_data_csv/metadata_matlab.csv') 
+metadata_matlab <- read_csv('../../load_data_csv/metadata_matlab_complete.csv') 
 
 # read metadata file available for CellProfiler (new version)
 metadata_cp <- read_csv('../../load_data_csv/file_list.csv') %>%
   print()
+
+filename_csv_out <- '../../analysis/2017_04_28_matlab/TrackeddetectedNeutros.csv'
+
 ```
 
 The date column is merged from the new Metadata_file. Note that the experiment ID is 
@@ -45,7 +50,7 @@ metadata_date_id <-  metadata_cp %>%
   slice(1:17) 
   
 metadata_matlab %<>% 
-  left_join(.,metadata_date_id, by= "Metadata_id") %>% 
+  left_join(.,metadata_date_id, by = "Metadata_id") %>% 
   mutate(Metadata_dose = Metadata_condition) %>%
   rename(Metadata_condition2 = Metadata_condition) %>%
   print
@@ -62,7 +67,7 @@ metadata_condition <-  metadata_cp %>%
   ungroup
   
 metadata_matlab %<>% 
-  left_join(.,metadata_condition, by= c("Metadata_date", "Metadata_id", "Metadata_matrix")) %>% 
+  left_join(.,metadata_condition, by = c("Metadata_date", "Metadata_id", "Metadata_matrix")) %>% 
   print
 ```
 
@@ -101,6 +106,7 @@ file_list <- lapply(metadata_matlab$File_Path, function(i){
 population <- lapply(file_list, function(i){suppressMessages(read_csv(i))})
 
 ```
+
 The metadata for the population is rewritten as a list. Then, the Map function is used to 
 merge the population and the metadata list. The *do.call()* function is used to merge the list of 
 data frames into one big data frame.
@@ -110,6 +116,8 @@ metadata_list <- split(metadata_matlab, seq(nrow(metadata_matlab)))
 population <- Map(function(x,y){c(x,y)},population,metadata_list) 
 
 population <- do.call(rbind, lapply(population,data.frame))
+
+write_csv(population,filename_csv_out)
 ```
 
 
@@ -118,8 +126,7 @@ strata <- c('Metadata_condition','Metadata_dose','Metadata_id','Metadata_date','
 
 population %>% group_by_(.dots = strata) %>%
   select(Metadata_condition,Metadata_dose,Metadata_id,Metadata_date,Metadata_matrix,File_Path) %>%
+  filter(Metadata_matrix == 'HEM') %>%
   slice(1) %>%
-  print
-#  slice(1)
-
+  knitr::kable()
 ```

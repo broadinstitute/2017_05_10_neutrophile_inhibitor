@@ -186,6 +186,10 @@ t <-
   ) %>%
   dplyr::collect()
 
+
+t %<>% arrange(Metadata_condition)
+
+
 t %<>% mutate(id = paste(Metadata_id, Metadata_condition, Metadata_dose))
 
  cm <- t %>%

@@ -31,7 +31,7 @@ file_list <- data.frame(image = image_names, label = label_names)
 ```
 
 Use file.path() to create the path to images / labels and write csv file 
-```{}
+```{r}
 write_csv(file_list %>% mutate(image = file.path(image_dir,image), label = file.path(label_dir, label)), csv_out)
 
 ```
