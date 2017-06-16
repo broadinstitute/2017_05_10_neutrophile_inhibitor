@@ -43,13 +43,26 @@ tracks <- read_csv(file.path(data_dir, csv_in)) %>%
   group_by_(.dots = strata) 
 
 ```
+```{r}
+
+quality <- tracks %>% 
+  cytominer::assess(min_path_length = 19)
+
+ggplot(data = quality, aes(x = VOT, y = Exp_Tracks, color = Metadata_id, shape = Metadata_condition)) +
+   geom_point()
+```
+
 
 The tracking quality of gn0033 is very low -> we remove it
-
 ```{r}
-tracks %<>% 
-  filter(Metadata_id != "gn0033") %>%
-  filter(Metadata_id != "gn0055")
+
+tracks <- tracks %>%
+  filter(Track_Length > 19) %>%
+  mutate(Track_Angle = Track_Angle + pi/2) %>% # rotate all angles by 90 degree or pi/2
+  mutate(Track_Angle = ifelse(Track_Angle > pi, Track_Angle - 2*pi, Track_Angle) ) %>%
+  mutate(Track_Angle = ifelse(Track_Angle < 0, Track_Angle + 2*pi, Track_Angle) ) %>%
+  mutate(Track_Angle = Track_Angle / pi)
+
 ```
 
 List all available experiments.
@@ -139,24 +152,26 @@ population <- tracks %>%
   na.omit() %>%
   ungroup(.)
 
-# define values that can be normalized 
-variables <- c("Track_Speed","Track_Speed_Y","Track_Speed_X","Track_xFMI","Track_yFMI","Track_Directionality","Track_Distance_Traveled")
-
 #population <- cytominer::generalized_log(population, variables = variables)
+feature_var = c("Track_Speed","Track_Speed_Y","Track_Speed_X","Track_xFMI","Track_yFMI","Track_Directionality","Track_Distance_Traveled","Track_CI","Track_Integrated_Distance_Traveled")
 
 normalized <-
   cytominer::normalize(
     population = population,
-    variables = variables,
+    variables = feature_var,
     strata =  "Metadata_id",
     sample = population %>% filter(Metadata_condition == "control"),
     operation = "robustize"
   )
 
+normalized <- cbind(normalized, population$Track_Angle) %>%
+  mutate(Track_Angle = Track_Angle)
+
+
 normalized %<>% dplyr::collect() 
 
 data <- normalized %>% 
-  select(one_of(c(variables)))
+  select(one_of(c(feature_var)))
 
 corrplot(cor(data))
 ```
@@ -216,4 +231,56 @@ sector_fraction_condition <- sector_fraction %>%
   print
 
 
+```
+Visualize data using tsne and pca
+```{r}
+feature_var = c("Track_Speed","Track_Speed_Y","Track_Speed_X","Track_xFMI","Track_yFMI","Track_Directionality","Track_Distance_Traveled","Track_Angle","Track_CI","Track_Integrated_Distance_Traveled","Track_DP")
+
+# normalize angle to [0 1]
+data <- normalized %>% 
+  mutate(Track_Angle = (Track_Angle + pi) / (2*pi))
+
+data %<>% 
+  ungroup()
+
+train_data <- data %>% select_(.dots = feature_var)
+  
+library("Rtsne")
+
+```
+
+```{r}
+
+plot_tsne <- function(train_data, data, perplexity = 50, title_name = "tsne with perplexity = 50"){
+  tsne <- Rtsne(train_data, dims = 2, perplexity = 1, verbose = TRUE, max_iter = 500, theta = 0.5, pca_scale = TRUE)
+  df <- cbind(data,as.data.frame(tsne$Y))
+  ## plotting the results without clustering
+  ggplot(data = df, aes(x = V1, y = V2, color = factor(Track_Sector), shape = Metadata_condition)) +
+  geom_point() +
+  xlab("") + ylab("") +
+  ggtitle("t-SNE") +
+  guides(colour = guide_legend(override.aes = list(size = 6))) +
+  theme_light(base_size = 20) +
+  theme(axis.text.x = element_blank(),
+        axis.text.y = element_blank()) + 
+  labs(title = title_name)
+    
+}
+
+plot_tsne(train_data, data, 5, title_name = "tnse with perplexity = 5")
+plot_tsne(train_data, data, 10, title_name = "tnse with perplexity = 10")
+plot_tsne(train_data, data, 25, title_name = "tnse with perplexity = 25")
+plot_tsne(train_data, data, 50, title_name = "tnse with perplexity = 50")
+plot_tsne(train_data, data, 100, title_name = "tnse with perplexity = 100")
+```
+
+
+Diffusion map
+```{r}
+library(destiny)
+
+dm <- DiffusionMap(train_data)
+
+plot(dm)
+View(dm)
 ```

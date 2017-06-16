@@ -1,0 +1,136 @@
+---
+title: "load_data"
+author: "TB"
+date: "5/15/2017"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("readr")
+library("tibble")
+library("dplyr")
+library("tidyr")
+library("stringr")
+library("purrr")
+library("broom")
+library("dplyr")
+library("tsne")
+library("ggfortify")
+library("cluster")
+library("magrittr")
+library("knitr")
+#library("cytominer")
+# load cytominer 
+
+```
+
+# Load data 
+The output of the MATLAB tracking is stored in "track.csv", see create_metadata.Rmd
+```{r}
+csv_in <- 'tracks.csv'
+data_dir <- '../../analysis/2017_04_28_matlab/'
+strata <- c('Metadata_condition','Metadata_dose','Metadata_id','Metadata_date','Metadata_matrix')
+
+tracks <- read_csv(file.path(data_dir, csv_in)) %>%
+  select(Metadata_id,Metadata_matrix, Metadata_condition, Metadata_dose, everything() ) %>%
+  arrange(Metadata_id, Metadata_matrix, Metadata_condition, Metadata_dose) %>%
+  group_by_(.dots = strata) 
+```
+
+Assess the tracking quality. 
+```{r}
+quality <- tracks %>% 
+  cytominer::assess(min_path_length = 19)
+
+ggplot(data = quality, aes(x = VOT, y = Exp_Tracks, color = Metadata_id, shape = Metadata_condition)) +
+   geom_point()
+```
+
+
+Small trajectories are removed and the angle is rotated by 90 degrees the angle is 
+calculated using atan2 with 0 degree on "three o clock"; now we rotate 0 degree to the 
+top. 
+
+```{r}
+population <- tracks %>%
+  filter(Track_Length > 19) %>%
+  mutate(Track_Angle = Track_Angle + pi/2) %>% # rotate all angles by 90 degree or pi/2
+  mutate(Track_Angle = ifelse(Track_Angle > pi, Track_Angle - 2*pi, Track_Angle) ) %>%
+  mutate(Track_Angle = ifelse(Track_Angle < 0, Track_Angle + 2*pi, Track_Angle) ) %>% 
+  na.omit() %>%
+  ungroup(.) %>%
+  filter(Metadata_matrix == "FN")
+```
+
+# Normalize data
+Data normalization is performed using cytominer::normalize. Normalization is performed using the "control" group; these 
+migrations have been run without chemotaxis (no IL-8, i.e. no chemoattractant)
+```{r}
+feature_var = c("Track_Speed","Track_Speed_Y","Track_Speed_X","Track_xFMI","Track_yFMI","Track_Directionality","Track_Distance_Traveled","Track_MSD","Track_Integrated_Distance_Traveled","Track_Length")
+
+
+normalized <-
+  cytominer::generalized_log(population, variables = feature_var) %>%
+  cytominer::normalize(
+    population = population,
+    variables = feature_var,
+    strata =  "Metadata_id",
+    sample = population %>% filter(Metadata_condition == "control"),
+    operation = "robustize"
+  ) %>%
+  mutate(Track_Angle = Track_Angle / pi)
+
+normalized %<>% 
+  dplyr::collect() %>%
+  na.omit() 
+```
+
+```{r}
+feature_dm = c(feature_var, "Track_Angle") 
+train_data <- normalized %>% 
+  ungroup() %>% 
+  select_(.dots = feature_tsne) 
+```
+
+Visualize data using diffusion maps
+```{r}
+library(destiny)
+library(scatterplot3d)
+
+dif <- DiffusionMap(normalized, vars = feature_dm)
+
+```
+
+3D Plot
+```{r}
+scatter3d(x = dif$DC1, y = dif$DC2, z = dif$DC3, point.col = "blue", surface=FALSE, grid = FALSE, groups = factor(dif$Metadata_id))
+
+scatter3d(x = dif$DC1, y = dif$DC2, z = dif$DC3, point.col = "blue", surface=FALSE, grid = FALSE, groups = factor( dif$Metadata_condition ))
+
+scatter3d(x = dif$DC1, y = dif$DC2, z = dif$DC4, point.col = "blue", surface=FALSE, grid = FALSE, groups = factor(dif$Track_Sector))
+
+scatter3d(x = dif$DC1, y = dif$DC3, z = dif$DC4, point.col = "blue", surface=FALSE, grid = FALSE, groups = factor(dif$Track_Sector))
+
+scatter3d(x = dif$DC1, y = dif$DC3, z = dif$DC9, point.col = "blue", surface=FALSE, grid = FALSE, groups = factor(dif$Track_Sector))
+
+```
+
+2D Plot
+```{r}
+ggplot(data = dif, aes(x = DC1, y = DC3, color = factor(Metadata_condition))) +
+  geom_point()
+
+ggplot(data = dif, aes(x = DC1, y = DC2, color = factor(Metadata_id))) +
+  geom_point()
+
+ggplot(data = dif, aes(x = DC1, y = DC4, color = factor(Metadata_id))) +
+  geom_point()
+
+ggplot(data = dif, aes(x = DC3, y = DC5, color = factor(Metadata_id))) +
+  geom_point()
+
+```
+
