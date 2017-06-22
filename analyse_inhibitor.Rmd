@@ -164,6 +164,12 @@ normalized <-
     operation = "robustize"
   )
 
+population %>% 
+   filter(Metadata_condition == "control") %>%
+   summarise(n = n()) %>% 
+  print
+
+
 normalized <- cbind(normalized, population$Track_Angle) %>%
   mutate(Track_Angle = Track_Angle)
 

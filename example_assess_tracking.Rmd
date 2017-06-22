@@ -78,3 +78,18 @@ quality %>%
   arrange(mean_vot) %>%
   print
 ```
+
+
+To assess the tracking quality in one view it is usefull to plot the distribution of the VOT and the fraction valid tracks. 
+```{r}
+ggplot(quality, aes(VOT)) +
+  geom_histogram(binwidth = 0.025)
+
+ggplot(quality, aes(Exp_Valid_Track_Fraction)) +
+  geom_histogram(binwidth = 0.04)
+
+ggplot(quality,aes(x = VOT,y = Exp_Tracks))  +
+  geom_point(aes(colour = Metadata_condition, shape = Metadata_matrix))
+```
+
+```
