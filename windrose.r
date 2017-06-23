@@ -14,7 +14,7 @@ plot.windrose <- function(data,
   palette = "YlGnBu",
   countmax = NA,
   debug = 0,
-  scale_name = "Speed in µm/min)",
+  scale_name = "Speed in µm/min",
   title_name = "Rose plot"){
   
   
