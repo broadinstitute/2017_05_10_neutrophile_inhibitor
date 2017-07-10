@@ -33,28 +33,236 @@ stored in the data folder as "track.csv". Once the data is stored, the processin
 instead "tracks.csv" is loaded. 
 ```{r}
 csv_in <- 'TrackeddetectedNeutros.csv'
-csv_out <- 'tracks.csv'
+csv_out <- 'clean_tracks.csv'
 data_dir <- '../../analysis/2017_04_28_matlab/'
 strata <- c('Metadata_condition','Metadata_dose','Metadata_id','Metadata_date','Metadata_matrix')
 
-if (file.exists(file.path(data_dir, csv_out))) {
-  tracks <- read_csv(file.path(data_dir, csv_out))
-} else {
+#if (file.exists(file.path(data_dir, csv_out))) {
+#  tracks <- read_csv(file.path(data_dir, csv_out))
+#} else {
 
-  df <- read_csv(file.path(data_dir, csv_in))
-  df %<>% dplyr::mutate(Metadata_frame = as.double(Metadata_timePoint)) 
+df <- read_csv(file.path(data_dir, csv_in))
+df %<>% dplyr::mutate(Metadata_frame = as.double(Metadata_timePoint)) 
+
+
+#The data contains tracking data for neutrophils from different conditions. The datasets 
+#can be ditinguished using the Metadata columns defined in strata. 
+track_label = c('TrackObjects_Label')
+```
+# Cleanup 
+Cleanup! Gyde provided a list with frames / videos with an possible technical error. We remove these data.
+Gydes list:
+
+09.07.2013 GN0039: Kontrolle - frame 121, 
+
+  * 0,5µM - frame 1 und 2, 
+  * 50µM -frame 1-7, 
+  * Vehikel - frame 1
+  
+11.06.2013 GN0033: 
+
+  * 5µm - frame 1-45! Wenn diese frames nicht exkludiert werden können, muss der Tag exkludiert werden
+  * 11.07.2013 GN0040: 
+  * Kontrolle - frame 1-5, 
+  * 0,5µM - 1-7, 
+  * 50µm - 1-9
+
+12.07.2013 GN0041: 
+
+  * Kontrolle - 1-10, 
+  * 0,5µm- 1-10, 
+  * 5µm - 1-10, 
+  * 50µm - 1-10
+
+25.04.2013 GN0017: 
+
+  * 0,5µm - frame 1-50!, 
+  * 50µm- 1-25!, 
+  * Vehikel - 1-25! Wenn diese frames nicht exkludiert werden können, muss der Tag exkludiert werden
+
+15.07.2013 BD0053: 
+
+  * 0,5µm - 1-10, 
+  * 5µm - 1-5, 
+  * 50µm - 1-5, 
+  * Vehikel - 1-5
+
+17.07.2013 BD0054: 
+
+  * Kontrolle - 1-5, 
+  * 0,5µm - 1-5, 
+  * Vehikel - 1-10
+
+19.07.2013 BD0055: 
+
+  * Kontrolle - 1-10, 
+  * 0,5µm - 1-10, 
+  * 5µm - 1-5, 
+  * 50µm - 1-5
+
+17.09.2013 EJ0005: 
+
+  * 0,5µm - 1-10, 
+  * Vehikel HEM - 1, 
+  * Vehikel FN - 1-5
+
+18.09.2013 BD0069: 
+
+  * 5µm - 1-5, 
+  * 50µm - 1-7, 
+  * Vehikel FN - 1-10
+
+19.09.2013 EJ0006: 
+
+  * Vehikel FN - 115-121
+
+20.09.2013 BD0071: 
+
+  * Kontrolle - 1-5, 
+  * 0,5µm - 1-5, 
+  * Vehikel HEM - 1-10,
+  * Vehikel FN - 1-5
+
+26.09.2013 GN0050: 
+
+  * Kontrolle - 1-10, 
+  * 50µm - 1-5,   
+  * Vehikel HEM - 1-5,
+  * Vehikel FN - 1-10
+
+14.11.2013 GN0055: 
+
+  * Kontrolle - 1-25, 
+  * 5µm - 1-5, 
+  * Vehikel HEM - 1-5
+
+27.09.2013 BD0073: 
+
+  * Kontrolle - 1-5, 
+  * 5µm - 1-10, 
+  * 50µm - 1-7, 
+  * Vehikel HEM- 1-5, 
+  * Vehikel FN 1-25! Wenn diese frames nicht exkludiert werden können, hier kein FN vs HEM Vergleich!
+
+30.09.2013 GN0051: 
+
+  * Kontrolle - 1-10, 
+  * 5µm - 1-10, 
+  * Vehikel HEM - 1-5,
+  * Vehikel FN - 1-70! Wenn diese frames nicht exkludiert werden können, hier kein FN vs HEM Vergleich!
+
+03.10.2013 GN0052: 
+
+  * Kontrolle - 1-10, 
+  * 5µm - 1-5, 
+  * Vehikel HEM - 1-5
+
+```{r}
+df %<>% select(Metadata_id, Metadata_date, Metadata_matrix, Metadata_condition, Metadata_dose, Metadata_frame, everything())
+
+df1 <- df %>% 
+  filter( !((Metadata_id == 'gn0039') & (Metadata_condition == 'control') &  (Metadata_frame == 121) ) ) %>% 
+  filter( !((Metadata_id == 'gn0039') & (Metadata_condition == 'vehicle') &  (Metadata_frame == 1) ) ) %>% 
+  filter( !((Metadata_id == 'gn0039') & (Metadata_dose == 0.5) &  (Metadata_frame < 3) ) ) %>%
+  filter( !((Metadata_id == 'gn0039') & (Metadata_dose == 50) &  (Metadata_frame < 8) ) ) %>% 
+  
+  filter( !((Metadata_id == 'gn0033') & (Metadata_dose == 5) &  (Metadata_frame < 46) ) ) %>%
+  
+  filter( !((Metadata_id == 'gn0040') & (Metadata_condition == 'control') & (Metadata_frame < 6) ) ) %>%
+  filter( !((Metadata_id == 'gn0040') & (Metadata_dose == 0.5) &  (Metadata_frame < 8) ) ) %>%
+  filter( !((Metadata_id == 'gn0040') & (Metadata_dose == 50) &  (Metadata_frame < 10) ) ) %>%
+  
+  filter( !((Metadata_id == 'gn0041') & (Metadata_condition == 'control') & (Metadata_frame < 11) ) ) %>%
+  filter( !((Metadata_id == 'gn0041') & (Metadata_dose == 0.5) &  (Metadata_frame < 11) ) ) %>%
+  filter( !((Metadata_id == 'gn0041') & (Metadata_dose == 5) &  (Metadata_frame < 11) ) ) %>%
+  filter( !((Metadata_id == 'gn0041') & (Metadata_dose == 50) &  (Metadata_frame < 11) ) ) %>%
+  
+  filter( !((Metadata_id == 'gn0017') & (Metadata_condition == 'vehicle') & (Metadata_frame < 25) ) ) %>%
+  filter( !((Metadata_id == 'gn0017') & (Metadata_dose == 0.5) &  (Metadata_frame < 51) ) ) %>%
+  filter( !((Metadata_id == 'gn0017') & (Metadata_dose == 50) &  (Metadata_frame < 26) ) ) %>%
+  
+  filter( !((Metadata_id == 'gn0017') & (Metadata_condition == 'vehicle') & (Metadata_frame < 25) ) ) %>%
+  filter( !((Metadata_id == 'gn0017') & (Metadata_dose == 0.5) &  (Metadata_frame < 51) ) ) %>%
+  filter( !((Metadata_id == 'gn0017') & (Metadata_dose == 50) &  (Metadata_frame < 26) ) ) %>%
+  
+  filter( !((Metadata_id == 'bd0053') & (Metadata_condition == 'vehicle') & (Metadata_frame < 6) ) ) %>%
+  filter( !((Metadata_id == 'bd0053') & (Metadata_dose == 0.5) &  (Metadata_frame < 11) ) ) %>%
+  filter( !((Metadata_id == 'bd0053') & (Metadata_dose == 5) &  (Metadata_frame < 6) ) ) %>%
+  filter( !((Metadata_id == 'bd0053') & (Metadata_dose == 50) &  (Metadata_frame < 6) ) ) %>%
+  
+  filter( !((Metadata_id == 'bd0054') & (Metadata_condition == 'control') & (Metadata_frame < 6) ) ) %>%
+  filter( !((Metadata_id == 'bd0054') & (Metadata_condition == 'vehicle') & (Metadata_frame < 11) ) ) %>%
+  filter( !((Metadata_id == 'bd0054') & (Metadata_dose == 0.5) &  (Metadata_frame < 6) ) ) %>%
+  
+  filter( !((Metadata_id == 'bd0054') & (Metadata_condition == 'control') & (Metadata_frame < 6) ) ) %>%
+  filter( !((Metadata_id == 'bd0054') & (Metadata_condition == 'vehicle') & (Metadata_frame < 11) ) ) %>%
+  filter( !((Metadata_id == 'bd0054') & (Metadata_dose == 0.5) &  (Metadata_frame < 6) ) ) %>%
+  
+  filter( !((Metadata_id == 'bd0055') & (Metadata_condition == 'control') & (Metadata_frame < 11) ) ) %>%
+  filter( !((Metadata_id == 'bd0055') & (Metadata_dose == 0.5) &  (Metadata_frame < 11) ) ) %>%
+  filter( !((Metadata_id == 'bd0055') & (Metadata_dose == 5) &  (Metadata_frame < 6) ) ) %>%
+  filter( !((Metadata_id == 'bd0055') & (Metadata_dose == 50) &  (Metadata_frame < 6) ) ) %>%
+  
+  filter( !((Metadata_id == 'bd0055') & (Metadata_condition == 'control') & (Metadata_frame < 11) ) ) %>%
+  filter( !((Metadata_id == 'bd0055') & (Metadata_dose == 0.5) &  (Metadata_frame < 11) ) ) %>%
+  filter( !((Metadata_id == 'bd0055') & (Metadata_dose == 5) &  (Metadata_frame < 6) ) ) %>%
+  filter( !((Metadata_id == 'bd0055') & (Metadata_dose == 50) &  (Metadata_frame < 6) ) ) %>%
+  
+  filter( !((Metadata_id == 'ej0005') & (Metadata_condition == 'vehicle') & (Metadata_matrix == 'HEM') & (Metadata_frame < 2) ) ) %>%
+  filter( !((Metadata_id == 'ej0005') & (Metadata_condition == 'vehicle') & (Metadata_matrix == 'FN') & (Metadata_frame < 6) ) ) %>%
+  filter( !((Metadata_id == 'ej0005') & (Metadata_dose == 0.5) &  (Metadata_frame < 11) ) ) %>%
+  
+  filter( !((Metadata_id == 'bd0069') & (Metadata_condition == 'vehicle') & (Metadata_matrix == 'FN') & (Metadata_frame < 11) ) ) %>%
+  filter( !((Metadata_id == 'bd0069') & (Metadata_dose == 5) &  (Metadata_frame < 6) ) ) %>%
+  filter( !((Metadata_id == 'bd0069') & (Metadata_dose == 50) &  (Metadata_frame < 8) ) ) %>%
+  
+  filter( !((Metadata_id == 'ej0006') & (Metadata_condition == 'vehicle') & (Metadata_matrix == 'FN') & (Metadata_frame > 114) ) ) %>%
+  
+  filter( !((Metadata_id == 'bd0071') & (Metadata_condition == 'control') & (Metadata_frame < 6) ) ) %>%
+  filter( !((Metadata_id == 'bd0071') & (Metadata_condition == 'vehicle') & (Metadata_matrix == 'HEM') & (Metadata_frame < 11) ) ) %>%
+  filter( !((Metadata_id == 'bd0071') & (Metadata_condition == 'vehicle') & (Metadata_matrix == 'FN') & (Metadata_frame < 6) ) ) %>%
+  filter( !((Metadata_id == 'bd0071') & (Metadata_dose == 0.5) &  (Metadata_frame < 6) ) ) %>%
+  
+  filter( !((Metadata_id == 'gn0050') & (Metadata_condition == 'control') & (Metadata_frame < 11) ) ) %>%
+  filter( !((Metadata_id == 'gn0050') & (Metadata_condition == 'vehicle') & (Metadata_matrix == 'HEM') & (Metadata_frame < 6) ) ) %>%
+  filter( !((Metadata_id == 'gn0050') & (Metadata_condition == 'vehicle') & (Metadata_matrix == 'FN') & (Metadata_frame < 11) ) ) %>%
+  filter( !((Metadata_id == 'gn0050') & (Metadata_dose == 50) &  (Metadata_frame < 6) ) ) %>%
+  
+  filter( !((Metadata_id == 'gn0055') & (Metadata_condition == 'control') & (Metadata_frame < 26) ) ) %>%
+  filter( !((Metadata_id == 'gn0055') & (Metadata_condition == 'vehicle') & (Metadata_matrix == 'HEM') & (Metadata_frame < 6) ) ) %>%
+  filter( !((Metadata_id == 'gn0055') & (Metadata_dose == 5) &  (Metadata_frame < 6) ) ) %>%
+  
+  filter( !((Metadata_id == 'bd0073') & (Metadata_condition == 'control') & (Metadata_frame < 6) ) ) %>%
+  filter( !((Metadata_id == 'bd0073') & (Metadata_condition == 'vehicle') & (Metadata_matrix == 'HEM') & (Metadata_frame < 6) ) ) %>%
+  filter( !((Metadata_id == 'bd0073') & (Metadata_condition == 'vehicle') & (Metadata_matrix == 'FN') & (Metadata_frame < 26) ) ) %>%
+  filter( !((Metadata_id == 'bd0073') & (Metadata_dose == 5) &  (Metadata_frame < 11) ) ) %>%
+  filter( !((Metadata_id == 'bd0073') & (Metadata_dose == 50) &  (Metadata_frame < 8) ) ) %>%
+  
+  filter( !((Metadata_id == 'gn0051') & (Metadata_condition == 'control') & (Metadata_frame < 11) ) ) %>%
+  filter( !((Metadata_id == 'gn0051') & (Metadata_condition == 'vehicle') & (Metadata_matrix == 'HEM') & (Metadata_frame < 6) ) ) %>%
+  filter( !((Metadata_id == 'gn0051') & (Metadata_condition == 'vehicle') & (Metadata_matrix == 'FN') & (Metadata_frame < 71) ) ) %>%
+  filter( !((Metadata_id == 'gn0051') & (Metadata_dose == 5) &  (Metadata_frame < 11) ) ) %>%
+  
+  filter( !((Metadata_id == 'gn0052') & (Metadata_condition == 'control') & (Metadata_frame < 11) ) ) %>%
+  filter( !((Metadata_id == 'gn0052') & (Metadata_condition == 'vehicle') & (Metadata_matrix == 'HEM') & (Metadata_frame < 6) ) ) %>%
+  filter( !((Metadata_id == 'gn0052') & (Metadata_dose == 5) &  (Metadata_frame < 6) ) ) %>%
+  
+  print
   
 
-  #The data contains tracking data for neutrophils from different conditions. The datasets 
-  #can be ditinguished using the Metadata columns defined in strata. 
-  track_label = c('TrackObjects_Label')
-  
-  tracks <- df %>% 
-    group_by_(.dots =  c(strata,track_label)) %>%
-    arrange(Metadata_timePoint) %>%
-    cytominer::track(., c(strata,track_label)) %>%
-    group_by_(.dots = strata) 
-  }
+df %>%   filter( ((Metadata_id == 'gn0052') & (Metadata_condition == 'vehicle') & (Metadata_matrix == 'FN') & (Metadata_frame > 114) ) ) %>%
+  print()
+
+```
+
+
+```{r}
+tracks <- df1 %>% 
+  group_by_(.dots =  c(strata,track_label)) %>%
+  arrange(Metadata_timePoint) %>%
+  cytominer::track(., c(strata,track_label)) %>%
+  group_by_(.dots = strata) 
+
 ```
 ## set nan values to 'None' and store the data
 ```{r}

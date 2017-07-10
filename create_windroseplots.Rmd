@@ -33,7 +33,7 @@ source("windrose.r")
 # Load data 
 The output of the MATLAB tracking is stored in "track.csv", see create_metadata.Rmd
 ```{r}
-csv_in <- 'tracks.csv'
+csv_in <- 'clean_tracks.csv'
 data_dir <- '../../analysis/2017_04_28_matlab/'
 strata <- c('Metadata_condition','Metadata_dose','Metadata_id','Metadata_date','Metadata_matrix')
 

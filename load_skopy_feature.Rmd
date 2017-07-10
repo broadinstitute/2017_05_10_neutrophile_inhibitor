@@ -46,7 +46,7 @@ skopy_db <- lapply(tbl_name, FUN = db2table, db = db)
 ```
 
 # Change ID 
-the id of each image is stored as UUID in raw data format. We translate it to something usefull. 
+the id of each image is stored as UUID in raw data format. We translate it to something more usefull, i.e. non raw data. 
 ```{r}
 cast.type <- function(x) {
   paste(as.character(unlist(x)), collapse = '')
@@ -82,26 +82,21 @@ moments %<>%
 
 ```{r}
 full_db <- c()
-full_db <- left_join(skopy_db[[1]],skopy_db[[5]],by = 'id')
-full_db <- left_join(full_db, skopy_db[[6]],by = 'id')
+full_db <- left_join(skopy_db[[1]],skopy_db[[6]],by = 'id')
+#full_db <- left_join(full_db, skopy_db[[6]],by = 'id')
 full_db <- left_join(full_db, skopy_db[[8]],by = 'id')
 full_db <- left_join(full_db, moments, by = 'id')
 ```
 
 How many different observation do we have?
 ```{r}
-population %>% 
+full_db %>% 
   ungroup() %>%
-  group_by(instance_id) %>%
+  group_by(id) %>%
   summarise(n = n()) %>%
   summarize(number_objects = n(), features = mean(n))
 ```
- 
-how many different features do?
-```{r}
-df1 %>% 
-  ungroup() %>%
-  group_by(feature) %>% 
-  summarise(n = n())
-```
 
+```{r}
+
+```

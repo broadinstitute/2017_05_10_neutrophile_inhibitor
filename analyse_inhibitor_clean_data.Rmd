@@ -49,7 +49,7 @@ csv_normalized <- 'clean_normalized.csv'
 data_dir <- '../../analysis/2017_04_28_matlab/'
 strata <- c('Metadata_condition','Metadata_dose','Metadata_id','Metadata_date','Metadata_matrix')
 
-# scale
+# scale speed from pixel/frame to µm/minute
 spdscale <- 1.5638 
 
 tracks <- read_csv(file.path(data_dir, csv_tracks)) %>%
@@ -71,6 +71,9 @@ Small trajectories are removed and the angles are scaled to [-pi, pi] and rotate
 clock, now we rotate zero 12 )
 
 Small trajectories of neutrophils that are observred less than 20 frames are removed. 
+
+Please note that the angles given in the normalized data are already rotated! 
+
 ```{r}
 # angles are scaled to the intervale (-pi, pi)
 population <- tracks %>%
@@ -110,7 +113,7 @@ ggplot(data = quality %>% filter(Metadata_matrix == 'HEM'),
   ggtitle("Track Quality for migration in HEM (high VOT is good)")
 ```
 
-Results: the migration in HEM shows a higher VOT compared to FN. Do we see a significant difference? Answer: yes, we get p = 0.0216 
+Results: the migration in HEM shows a higher VOT compared to FN. Do we see a significant difference? Answer: yes, we get p = 0.008 in the data with manually removed frames (not cleaned data p = 0.0216 )
 ```{r}
 x <- quality %>% filter(Metadata_matrix == "FN")
 y <- quality %>% filter(Metadata_matrix == "HEM")
@@ -129,7 +132,25 @@ population %>%
 ```
 
 The speed in FN is roughly twice as high as in HEM. With one exception: the CP17 migraions run in HEM. They also 
-show a very high standard deviation. Hmm... 
+show a very high standard deviation. Hmm... Lets have a close look at these migrations.
+```{r}
+population %>% 
+  ungroup() %>%
+  filter(Metadata_condition == 'CP17', Metadata_matrix == 'HEM') %>%
+  group_by(Metadata_id) %>%
+  summarise(mean_speed = mean(Track_Speed), sd_speed = sd(Track_Speed))
+```
+Aha, it is gn0055. Lets see which conditions / doses are affected  
+```{r}
+population %>% 
+  ungroup() %>%
+  filter(Metadata_condition == 'CP17', Metadata_matrix == 'HEM', Metadata_id == 'gn0055') %>%
+  group_by(Metadata_condition, Metadata_dose) %>%
+  summarise(mean_speed = mean(Track_Speed), sd_speed = sd(Track_Speed))
+```
+
+Only one dose is running wild. We remove it :) 
+
 ```{r}
 population %>% 
   ungroup() %>% 
@@ -138,12 +159,12 @@ population %>%
   filter(Metadata_matrix == "FN", Metadata_condition == "CP17") %>%
   summarise(mean_speed = mean(Track_Speed), sd_speed = sd(Track_Speed))
 
-# remove gn0055
-population %<>% 
-  filter(Metadata_condition != "water", Metadata_id != "gn0055")
+population %<>%
+ filter( !((Metadata_id == 'gn0055') & (Metadata_condition == 'CP17') &  (Metadata_dose == '5') ) ) 
+
 ```
 
-We remove our outlier and look again. This looks much nicer :)
+... and look again. This looks much nicer :)
 ```{r}
 population %>% 
   ungroup() %>% 
@@ -175,7 +196,7 @@ We select the migrations run in Fibronectin. Each condition (CP17, SP17, control
 ```{r}
 
 test_data <- population %>%
-  filter(Metadata_matrix == "HEM") 
+  filter(Metadata_matrix == "FN") 
 
 CP17 <- test_data %>% 
   filter(Metadata_condition == "CP17") 
@@ -227,11 +248,12 @@ h4 <- plot.windrose(spd = vehicle$Track_Speed, dir = (180 * (vehicle$Track_Angle
   spdmin = spdmin, spdmax = spdmax, spdres = spdres, dirres = dirres,  title_name = "Migration distribution vehicle")
 ```
 # Normalized data
-For the further analysis, we use normalized data. The normalization was performed using cytominer::normalize, see **example_normalize_matlab.Rmd**. Again, we remove the bad experiment. 
+For the further analysis, we use normalized data. The normalization was performed using cytominer::normalize, see **example_normalize_matlab.Rmd**. Again, we remove the one bad experiment. 
 ```{r}
 summary_speed <- normalized %>% 
   ungroup() %>%
-  filter(Metadata_id != "gn0055") %>%
+  filter( !((Metadata_id == 'gn0055') & (Metadata_condition == 'CP17') & (Metadata_dose == '5'))) %>%
+  #filter(Metadata_id != "gn0055") %>%
   group_by(Metadata_matrix, Metadata_condition, Metadata_dose) %>%
   summarise(mean_speed = mean(Track_Speed),std_speed = sd(Track_Speed))
   
@@ -256,7 +278,7 @@ ggplot(data = normalized %>% filter(Metadata_condition == 'vehicle', Metadata_ma
   ggtitle("Vehicle (normalized)")
 ```
 
-We calculate the fration of tracks migrating in each direction. The migration in FN shows 44.2% neutros migrating towards the chemoattractant.
+We calculate the fraction of tracks migrating in each direction. The migration in FN shows 43.6%  neutros migrating towards the chemoattractant (44.2% using all frames).
 ```{r}
 sector_fraction <- normalized %>% 
   filter(Metadata_condition != 'water') %>%
@@ -282,10 +304,10 @@ sector_fraction_condition <- sector_fraction %>%
   print
 ```
 
-Do we see a difference in the conditions? 
+Do we see a difference for different conditions? 
 
 Summary: 
-1. The migration in HEM does not show such a high variance as in FN (mean 44%, sd 16%) compard to HEM (mean 33%, sd 9% )
+1. The migration in HEM does not show such a high variance as in FN (mean 43.6%, sd 15.2%) compard to HEM (mean 31.5%, sd 7.4% )
 2. For HEM, the control 
 
 ```{r}
@@ -346,6 +368,7 @@ Using these function we can analyse the differences
 ```{r}
 t <-  ttest_speed("HEM","control","vehicle") %>% print
 ```
+
 ```{r}
 t <-  ttest_speed("HEM","control","CP17") %>% print
 ```
