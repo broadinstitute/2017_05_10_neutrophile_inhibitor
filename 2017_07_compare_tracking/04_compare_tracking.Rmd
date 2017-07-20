@@ -1,0 +1,121 @@
+---
+title: "load_data"
+author: "TB"
+date: "5/15/2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("readr")
+library("tibble")
+library("dplyr")
+library("tidyr")
+library("stringr")
+library("ggplot2")
+```
+
+In this notebook we compare the migration results of the CP tracking with the matlab tracking results. 
+The matlab tracking is used as a standard and not changed.  
+
+# Load tracking data tracking data 
+
+```{r}
+# define grouping variables 
+strata <- c('Metadata_condition','Metadata_dose','Metadata_id','Metadata_date','Metadata_matrix')
+
+analysis_folder <- '../../../analysis/2017_07_compare_tracking/'
+
+# load matlab data 
+population_matlab <- read_csv(file.path(analysis_folder, 'tracks_matlab.csv')) %>%
+  mutate(algorithm = 'MATLAB') %>% 
+  mutate(Metadata_id = tolower(Metadata_id)) %>%
+  group_by_(.dots = strata) 
+
+population_cp <- read_csv(file.path(analysis_folder, 'tracks_cp.csv')) %>%
+  mutate(algorithm = 'CP') %>% 
+  mutate(Metadata_id = tolower(Metadata_id)) %>%
+  group_by_(.dots = strata)  %>%
+  filter(Track_One_Cell == 1)
+  
+population <- rbind(population_matlab, population_cp)
+
+```
+
+assess the tracking quality using cytominer::assess
+```{r}
+quality_list <-  list(cytominer::assess(population_matlab, 20, strata),
+  cytominer::assess(population_cp, 20, strata))
+
+quality_list[[1]] %<>% 
+  mutate(algorithm = 'MATLAB') %>% 
+  mutate(Metadata_id = tolower(Metadata_id))
+
+quality_list[[2]] %<>% 
+  mutate(algorithm = 'CP') %>% 
+  mutate(Metadata_id = tolower(Metadata_id))
+
+quality2 <- do.call(rbind, quality_list)
+
+```
+
+
+# All experiments are ordered by theri VOT
+```{r}
+ggplot(data = quality2, aes(x = VOT, y = Exp_Valid_Tracks, color = algorithm, shape = Metadata_dose)) +
+  geom_point() 
+  # coord_fixed() 
+  #xlim(0,1) +
+  #ylim(0,1)
+```
+
+```{r}
+ggplot(data = quality2, aes(x = Exp_Mean_Track_Life_Time, y = Exp_Valid_Tracks, color = algorithm, shape = Metadata_dose)) +
+  geom_point() 
+
+
+```
+
+```{r}
+quality2 %>% 
+  ungroup() %>%
+  group_by_('algorithm') %>%
+  summarise(vot = mean(VOT)) %>%
+  print
+
+population %>% 
+  ungroup() %>%
+  filter(Track_Length > 19) %>%
+  group_by(Metadata_matrix, algorithm) %>%
+  summarise(mean_track_length = mean(Track_Length),
+            sd_track_length = sd(Track_Length)) %>% 
+  print
+
+```
+```{r}
+quality2 %>% 
+  ungroup() %>%
+  group_by(Metadata_matrix,Metadata_condition, algorithm) %>%
+  summarise(mean_vot = mean(VOT)) %>% 
+  #arrange(mean_vot) %>%
+  print
+```
+
+Compare Track_Speed 
+```{r}
+population %>% 
+  ungroup() %>% 
+  group_by(Metadata_matrix, algorithm) %>% 
+  filter(Track_Length > 19) %>% 
+  filter(Track_One_Cell == 1) %>%
+  summarise(mean_speed = mean(Track_Speed), 
+            sd_speed = sd(Track_Speed), 
+            mean_track_length = mean(Track_Length),
+            number_tracks = n())
+
+population %>% 
+  ungroup() %>% 
+  group_by(Metadata_matrix, Metadata_id, algorithm) %>% 
+  filter(Track_Length > 19) %>% 
+  summarise(mean_speed = mean(Track_Speed), sd_speed = sd(Track_Speed))
+```

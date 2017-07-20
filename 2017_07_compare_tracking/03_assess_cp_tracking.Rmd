@@ -1,0 +1,143 @@
+---
+title: "load_data"
+author: "TB"
+date: "5/15/2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("readr")
+library("tibble")
+library("dplyr")
+library("tidyr")
+library("stringr")
+library("ggplot2")
+library("magrittr")
+```
+
+In this notebook we compare the migration results of the CP tracking with the matlab tracking results. 
+
+CellProfiler tracking was performed using a the '2017_06_morph_gradient' pipeline. It uses a segmentation based on the morphological gradient; no preprocessing is performed to refine the tracks, i.e. LAP is not used. 
+
+
+# Load tracking data tracking data 
+```{r}
+# define grouping variables 
+strata <- c('Metadata_condition','Metadata_dose','Metadata_id','Metadata_date','Metadata_matrix')
+
+# result folder
+analysis_folder <- '../../../analysis/2017_07_compare_tracking/'
+
+population <- suppressMessages(read_csv(file.path(analysis_folder, 'clean_tracks_cp.csv'))) %>%
+  mutate(Metadata_id = tolower(Metadata_id)) %>%
+  group_by_(.dots = strata) 
+
+```
+
+A common problem in cell profiler tracking data is the so called 'two-objects' problem, i.e. two objects in the same frame belong to one path. This results in a wrong calculation of the speed. 
+In the tracking data, these tracks can be identified using the 'Track_One_Cell'. 
+```{r}
+population %>% 
+  ungroup() %>%
+  group_by(Metadata_matrix, Metadata_condition) %>%
+  summarise(quotient_good_tracks = sum(Track_One_Cell) / n(), n_bad_tracks = sum(Track_One_Cell == 0) )
+
+population %>% 
+  ungroup() %>%
+  filter(Track_Length > 20) %>%
+  group_by(Metadata_matrix) %>%
+  summarise(good_tracks = n(), n_bad_tracks = sum(Track_One_Cell == 0), quotient_good_tracks = sum(Track_One_Cell) / n() )
+```
+
+For the following analysis all bad frames are removed. 
+```{r}
+population_2 <- population %>%
+  filter(Track_One_Cell == 1)
+```
+
+
+To assess the tracking quality, we use cytominer::assess. The most interesting parameter is the VOT (valid observation time)
+```{r}
+quality <- cytominer::assess(population_2, 20, strata) 
+
+quality %>%
+  ungroup() %>%
+  group_by(Metadata_matrix) %>%
+  summarise(mean_VOT = mean(VOT), 
+            sd_VOT = sd(VOT),
+            mean_track_length = mean(Exp_Mean_Track_Length))
+
+```
+
+What are the worst and best IDs? 
+```{r}
+quality %>% 
+  ungroup() %>%
+  group_by(Metadata_matrix, Metadata_id) %>%
+  na.omit() %>%
+  summarise(mean_VOT = mean(VOT), 
+          mean_track_length = mean(Exp_Mean_Track_Length)) %>%
+  arrange(mean_VOT)
+  
+```
+
+```{r}
+quality %>% 
+  ungroup() %>%
+  group_by(Metadata_matrix, Metadata_condition) %>%
+  na.omit() %>%
+  summarise(mean_VOT = mean(VOT), 
+          mean_track_length = mean(Exp_Mean_Track_Length)) %>%
+  arrange(mean_VOT) 
+
+```
+
+
+
+```{r}
+ggplot(quality, aes(x = VOT, y = Exp_Mean_Track_Length, color = Metadata_condition, size)) +
+  geom_point() + 
+  scale_colour_hue(c=70, l=80)
+```
+To further optimize the tracking using CP we select one data set that is used for further processing. This data set should include 
+* many cells 
+* many tracking errors (measured using Track_One_cell)
+
+```{r}
+tracks <- population %>%  
+  ungroup() %>%
+  group_by_(.dots = strata) %>%
+  summarise(good_tracks = n(), n_bad_tracks = sum(Track_One_Cell == 0), quotient_good_tracks = sum(Track_One_Cell) / n() )
+
+track_quality <- left_join(quality, tracks, by=strata)
+
+ggplot(data=track_quality) + 
+  aes(y = quotient_good_tracks, x = VOT, color = Metadata_id, shape = Metadata_dose) + 
+  geom_point()
+```
+
+Is gn0040 a good candidate? the data looks promising but the image has many artefacts... 
+```{r}
+quality %>%  
+  filter(Metadata_matrix == "FN", Metadata_condition == "CP17", Metadata_dose == 5, Metadata_id == "gn0040") %>% 
+  print
+```
+What about gn0051, sp17, dose =5?
+```{r}
+track_quality %>%
+  filter(Metadata_condition == "SP17", Metadata_dose == 5, Metadata_id == "gn0051") %>% 
+  print
+```
+bd0053 control?
+```{r}
+track_quality %>% 
+  filter(Metadata_condition == "vehicle", Metadata_id == "gn0051") %>% 
+  print
+```
+
+```{r}
+track_quality %>% 
+  filter(Metadata_condition == "control", Metadata_id == "bd0073") %>% 
+  print
+```
