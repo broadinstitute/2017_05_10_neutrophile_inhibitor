@@ -1,0 +1,252 @@
+---
+title: "03-data_visualization"
+author: "TB"
+date: "7/19/2017"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("readr")
+library("tibble")
+library("dplyr")
+library("tidyr")
+library("stringr")
+library("ggplot2")
+library("r2excel")
+```
+
+# Load data
+We load the clean tracks and export 
+* xFMI
+* Speed and 
+* directionality
+as histogram plots to pdf files. 
+
+Helpfull 
+
+https://stackoverflow.com/questions/27556707/applying-a-function-to-the-output-of-dplyrs-group-by
+https://stackoverflow.com/questions/29034863/apply-a-ggplot-function-per-group-with-dplyr-and-set-title-per-group
+
+```{r}
+csv_in <- 'clean_tracks.csv'
+analysis_folder <- '../../../analysis/2017_04_28_matlab/'
+export_folder <- '../../../analysis/2017_04_28_matlab/4gyde/'
+strata <- c('Metadata_condition','Metadata_dose','Metadata_id','Metadata_date','Metadata_matrix')
+
+population <- read_csv(file.path(analysis_folder,csv_in)) %>% 
+  filter(Track_One_Cell == 1) %>%
+  mutate(ID = str_c(Metadata_id, Metadata_condition, Metadata_dose, Metadata_matrix, sep = ' ')) %>%
+  mutate(Metadata_condition = replace(Metadata_condition, Metadata_condition == "water", "vehicle")) %>%
+  mutate(Track_Valid = Track_Length > 19) %>% 
+  mutate(Track_Valid = as.numeric(Track_Valid)) %>% 
+  print
+
+  sem <- function(x){
+  sd(x) / sqrt(length(x))
+}
+
+```
+
+
+# Export Trajectories 
+Test: We export all trajectories as csv. Each experiment is exported separetly. This code is not used. Instead, we use the r2excel package to write the data on different sheeds.
+```{}
+df <- population %>% 
+  filter(Track_Length > 19) %>%
+  ungroup() %>%
+  group_by(ID) %>%
+  arrange(Track_Sector) %>%
+  select(ID, Track_Speed, Track_Directionality, Track_xFMI, Track_yFMI, Track_Sector, Track_Angle, Track_Length, TrackObjects_Label)
+
+dl = split(df, df$ID) 
+for (somegroup in dl) {write.csv(select(somegroup, -ID), file.path(analysis_folder,str_c('tracks ',first(somegroup$ID), ".csv")))}
+```
+
+
+# rename track sectors
+```{r}
+population %<>% 
+  mutate(Track_Sector = replace(Track_Sector, Track_Sector == 1, "positive sector")) %>%
+  mutate(Track_Sector = replace(Track_Sector, Track_Sector == 2, "negative sector")) %>%
+  mutate(Track_Sector = replace(Track_Sector, Track_Sector == 3, "neutral sector (up)")) %>%
+  mutate(Track_Sector = replace(Track_Sector, Track_Sector == 4, "neutral sector (down)")) 
+```
+
+# calculate freaction of trajectories in each sector 
+```{r}
+valid_tracks <- population %>% 
+  group_by(ID,Track_Sector) %>%
+  na.omit() %>%
+  summarise(Fraction_valid_tracks = sum(Track_Valid) / n()) %>% 
+  print
+
+valid_tracks_all <- population %>% 
+  group_by(ID) %>%
+  na.omit() %>%
+  summarise(Fraction_valid_tracks = sum(Track_Valid) / n()) %>% 
+  mutate(Track_Sector = "all") %>%
+select(ID, Track_Sector, everything()) %>%
+  print
+
+valid_tracks <- bind_rows(valid_tracks,valid_tracks_all) %>% 
+  ungroup() %>%
+  group_by(ID) %>% print
+```
+# summarize and export speed 
+* calcuate mean, sd and sem for neutros in all sectors 
+* and for each sector seperately 
+```{r}
+speed <- population %>% 
+  filter(Track_Length > 19) %>%
+  group_by(ID,Track_Sector) %>%
+  na.omit() %>%
+  summarise(Mean = mean(Track_Speed), 
+            SD = sd(Track_Speed), 
+            SEM = sem(Track_Speed), 
+            n = n())
+
+
+speed_all <- population %>% 
+  filter(Track_Length > 19) %>%
+  group_by(ID) %>%
+  na.omit() %>%
+  summarise(Mean = mean(Track_Speed), 
+            SD = sd(Track_Speed), 
+            SEM = sem(Track_Speed), 
+            n = n())  %>%
+  mutate(Track_Sector = 'all') %>%
+  select(ID, Track_Sector, everything()) 
+  
+
+speed2 <-  bind_rows(speed, speed_all) %>% 
+  group_by(ID, Track_Sector) %>% 
+  left_join(., valid_tracks, by = c("ID","Track_Sector")) %>% 
+  group_by(ID) %>% 
+  arrange(ID, Track_Sector)
+
+write_csv(speed2, file.path(analysis_folder, 'speed.csv'))
+```
+ 
+# summarize and export directionality
+```{r}
+directionality <- population %>% 
+  filter(Track_Length > 19) %>%
+  group_by(ID,Track_Sector) %>%
+  na.omit() %>%
+  summarise(Mean = mean(Track_Directionality), 
+            SD = sd(Track_Directionality), 
+            SEM = sem(Track_Directionality), 
+            n = n())  
+
+
+directionality_all <- population %>% 
+  filter(Track_Length > 19) %>%
+  group_by(ID) %>%
+  na.omit() %>%
+  summarise(Mean = mean(Track_Directionality), 
+            SD = sd(Track_Directionality), 
+            SEM = sem(Track_Directionality), 
+            n = n())  %>%
+  mutate(Track_Sector = 'all') %>%
+  select(ID, Track_Sector, everything()) 
+  
+
+directionality2 <-  bind_rows(directionality, directionality_all) %>% 
+  group_by(ID, Track_Sector) %>% 
+  left_join(., valid_tracks, by = c("ID","Track_Sector")) %>% 
+  group_by(ID) %>% 
+  arrange(ID, Track_Sector) 
+ 
+write_csv(directionality2, file.path(analysis_folder, 'directionality.csv'))
+```
+```{r}
+df <- population %>% 
+  filter(Track_Length > 19) %>% 
+  select(ID, Track_Speed, Track_Directionality, Track_xFMI, Track_yFMI, Track_Sector, Track_Angle, Track_Length, TrackObjects_Label) %>%
+  ungroup() %>%
+  group_by(ID) %>%
+  arrange(Track_Sector) 
+
+ids <- df %>% 
+  select(ID) %>%
+  ungroup() %>%
+  group_by(ID) %>%
+  slice(1)
+
+ids <- as.vector(ids$ID)
+
+for (id in ids) {
+  track_export <- df %>%
+    filter(ID == id) %>%
+    ungroup()
+  
+  speed_export <- speed2 %>%
+    filter(ID == id) %>%
+    ungroup()
+  
+  directionality_export <- directionality2 %>%
+    filter(ID == id) %>%
+    ungroup()
+  
+  file_name <- file.path(export_folder,str_c(id,'.xlsx',sep = ""))
+
+  xlsx.writeMultipleData(file_name, track_export, speed_export, directionality_export)
+}
+```
+
+
+
+```{r}
+population %>% 
+  filter(Track_Length > 20) %>%
+  filter(Metadata_matrix == "FN") %>%
+  filter(Metadata_condition  == "CP17") %>%
+  filter(Metadata_dose == "50") %>%
+  ggplot(data = .) +
+    aes(x = Track_Speed) +
+    geom_histogram(binwidth = 0.3)
+```
+
+
+Data visualization 
+
+``` {r}
+population %>%
+  mutate(ID = str_c( Metadata_condition, Metadata_dose, sep = '_')) %>%
+  ggplot(data=.) + 
+    aes(x = Track_Speed) +
+    geom_histogram() +
+    facet_wrap(Metadata_id ~ ID,scales = "free")
+  
+```
+
+
+Save all plots for Gyde!
+```{}
+population %>%
+  ungroup() %>%
+  group_by(Metadata_id, Metadata_condition, Metadata_dose) %>%
+  do({
+  p <- ggplot(., aes(x=Track_Speed)) + geom_histogram() + ggtitle(str_c(unique(.$Metadata_id),unique(.$Metadata_condition,.),unique(.$Metadata_dose),sep=' '))
+  ggsave(p, filename=str_c('speed_',unique(.$Metadata_id),unique(.$Metadata_condition),unique(.$Metadata_dose),".pdf",sep = '_'))
+  })
+
+population %>%
+  ungroup() %>%
+  group_by(Metadata_id, Metadata_condition, Metadata_dose) %>%
+  do({
+  p <- ggplot(., aes(x=Track_xFMI)) + geom_histogram() + ggtitle(str_c(unique(.$Metadata_id),unique(.$Metadata_condition,.),unique(.$Metadata_dose),sep=' '))
+  ggsave(p, filename=str_c('xfmi_',unique(.$Metadata_id),unique(.$Metadata_condition),unique(.$Metadata_dose),".pdf",sep = '_'))
+  })
+
+
+population %>%
+  ungroup() %>%
+  group_by(Metadata_id, Metadata_condition, Metadata_dose) %>%
+  do({
+  p <- ggplot(., aes(x=Track_Directionality)) + geom_histogram() + ggtitle(str_c(unique(.$Metadata_id),unique(.$Metadata_condition,.),unique(.$Metadata_dose),sep=' '))
+  ggsave(p, filename=str_c('directionality_',unique(.$Metadata_id),unique(.$Metadata_condition),unique(.$Metadata_dose),".pdf",sep = '_'))
+  })
+```

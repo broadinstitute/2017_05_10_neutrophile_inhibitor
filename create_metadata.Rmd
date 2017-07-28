@@ -121,7 +121,7 @@ write_csv(population,filename_csv_out)
 ```
 
 
-```{r}
+```{}
 strata <- c('Metadata_condition','Metadata_dose','Metadata_id','Metadata_date','Metadata_matrix')
 
 population %>% group_by_(.dots = strata) %>%

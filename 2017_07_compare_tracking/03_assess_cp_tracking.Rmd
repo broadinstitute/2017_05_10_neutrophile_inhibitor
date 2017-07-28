@@ -40,12 +40,13 @@ In the tracking data, these tracks can be identified using the 'Track_One_Cell'.
 ```{r}
 population %>% 
   ungroup() %>%
+  filter(Track_Length > 19) %>%
   group_by(Metadata_matrix, Metadata_condition) %>%
   summarise(quotient_good_tracks = sum(Track_One_Cell) / n(), n_bad_tracks = sum(Track_One_Cell == 0) )
 
 population %>% 
   ungroup() %>%
-  filter(Track_Length > 20) %>%
+  filter(Track_Length > 19) %>%
   group_by(Metadata_matrix) %>%
   summarise(good_tracks = n(), n_bad_tracks = sum(Track_One_Cell == 0), quotient_good_tracks = sum(Track_One_Cell) / n() )
 ```
@@ -59,7 +60,8 @@ population_2 <- population %>%
 
 To assess the tracking quality, we use cytominer::assess. The most interesting parameter is the VOT (valid observation time)
 ```{r}
-quality <- cytominer::assess(population_2, 20, strata) 
+quality <- cytominer::assess(population, 19, strata) %>%
+  print
 
 quality %>%
   ungroup() %>%

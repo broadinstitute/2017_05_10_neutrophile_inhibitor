@@ -35,10 +35,11 @@ population_matlab <- read_csv(file.path(analysis_folder, 'tracks_matlab.csv')) %
 population_cp <- read_csv(file.path(analysis_folder, 'tracks_cp.csv')) %>%
   mutate(algorithm = 'CP') %>% 
   mutate(Metadata_id = tolower(Metadata_id)) %>%
-  group_by_(.dots = strata)  %>%
-  filter(Track_One_Cell == 1)
+  group_by_(.dots = strata) 
+ 
   
-population <- rbind(population_matlab, population_cp)
+population <- rbind(population_matlab, population_cp) %>%
+   filter(Track_One_Cell == 1)
 
 ```
 
@@ -79,12 +80,14 @@ ggplot(data = quality2, aes(x = Exp_Mean_Track_Life_Time, y = Exp_Valid_Tracks, 
 ```{r}
 quality2 %>% 
   ungroup() %>%
+  na.omit() %>%
   group_by_('algorithm') %>%
   summarise(vot = mean(VOT)) %>%
   print
 
 population %>% 
   ungroup() %>%
+  na.omit() %>%
   filter(Track_Length > 19) %>%
   group_by(Metadata_matrix, algorithm) %>%
   summarise(mean_track_length = mean(Track_Length),
@@ -113,9 +116,11 @@ population %>%
             mean_track_length = mean(Track_Length),
             number_tracks = n())
 
+
+
 population %>% 
   ungroup() %>% 
-  group_by(Metadata_matrix, Metadata_id, algorithm) %>% 
+  group_by(Metadata_matrix, algorithm) %>% 
   filter(Track_Length > 19) %>% 
   summarise(mean_speed = mean(Track_Speed), sd_speed = sd(Track_Speed))
 ```

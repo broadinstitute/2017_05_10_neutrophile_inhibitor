@@ -1,0 +1,47 @@
+---
+title: "load_data"
+author: "TB"
+date: "5/15/2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("tidyverse")
+```
+
+# Load data 
+The output of CellProfiler track module is loaded as CSV, tracked using cytominer::track and 
+stored in the data folder as "track.csv". 
+```{r}
+csv_in <- 'clean_tracks.csv'
+csv_out <- 'assessed.csv'
+analysis_folder <- '../../../analysis/2017_04_28_matlab/'
+strata <- c('Metadata_condition','Metadata_dose','Metadata_id','Metadata_date','Metadata_matrix')
+
+postprocessed <- read_csv(file.path(analysis_folder,csv_in)) %>% 
+  group_by_(.dots = strata)
+```
+
+## Assess quality
+```{r}
+result_gyde <- left_join(
+  
+  quality <- postprocessed %>% 
+    cytominer::assess(.,min_path_length = 20),
+  
+  postprocessed %>%
+    filter(Track_Length > 20) %>%
+    summarise(
+      tracks_in_positive_sector = sum(Track_Positive_Sector),
+      tracks_in_negative_sector = sum(Track_Negative_Sector),
+      tracks_in_neutral_up_sector = sum(Track_Neutral_Sector_Up),
+      tracks_in_neutral_down_sector = sum(Track_Neutral_Sector_Down)),
+  
+  by_ = strata) %>%
+  select(-sum_track) 
+
+write_csv(result_gyde, file.path(analysis_folder, csv_out))
+
+```
+
