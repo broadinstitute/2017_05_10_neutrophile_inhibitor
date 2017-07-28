@@ -69,8 +69,7 @@ df <- read_csv(file.path(input_folder, csv_in)) %>%
 tracks <- df %>%
   group_by_(.dots =  c(strata,track_label)) %>%
   arrange(Metadata_timePoint) %>%
-  cytominer::track(., c(strata,track_label)) %>%
-  print()
+  cytominer::track(., c(strata,track_label))
 ```
 ## PostProcessing 
 Calculate speed in µm/minute
@@ -288,9 +287,7 @@ clean_df <- df %>%
   
   filter( !((Metadata_id == 'gn0052') & (Metadata_condition == 'control') & (Metadata_frame < 11) ) ) %>%
   filter( !((Metadata_id == 'gn0052') & (Metadata_condition == 'vehicle') & (Metadata_matrix == 'HEM') & (Metadata_frame < 6) ) ) %>%
-  filter( !((Metadata_id == 'gn0052') & (Metadata_dose == 5) &  (Metadata_frame < 6) ) ) %>%
-  
-  print
+  filter( !((Metadata_id == 'gn0052') & (Metadata_dose == 5) &  (Metadata_frame < 6) ) ) 
 ```
 
 Track the "cleaned" data
@@ -299,8 +296,7 @@ clean_tracks <- clean_df %>%
   group_by_(.dots =  c(strata,track_label)) %>%
   arrange(Metadata_timePoint) %>%
   cytominer::track(., c(strata,track_label)) %>%
-  group_by_(.dots = strata) %>% 
-  print()
+  group_by_(.dots = strata) 
 ```
 
 
