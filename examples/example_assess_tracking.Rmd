@@ -1,0 +1,95 @@
+---
+title: "load_data"
+author: "TB"
+date: "5/15/2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("readr")
+library("tibble")
+library("dplyr")
+library("tidyr")
+library("stringr")
+library("ggplot2")
+library("purrr")
+library("broom")
+library("dplyr")
+library("tsne")
+library("ggfortify")
+library("cluster")
+library('magrittr')
+# load cytominer 
+
+```
+
+# Load tracking data 
+```{r}
+# define file name and result folder for tracked experiments
+csv_file_name <- 'tracks.csv'
+dir_list <- list('../../analysis/2017_06_05_tracking/')
+# metadata used to define experiments
+strata <- c('Metadata_condition','Metadata_dose','Metadata_id','Metadata_date','Metadata_matrix')
+
+read_track_results <- function(dir_list, strata) {
+  suppressMessages(read_csv(file.path(dir_list, csv_file_name))) %>% 
+  group_by_(.dots = strata)
+}
+```
+
+assess the tracking quality using cytominer::assess
+```{r}
+assess_quality <- function(track, strata){
+  quality <- cytominer::assess(track, 20, strata)
+  quality[is.na(quality)] <- 0
+  return(quality)
+  }
+
+tracks <- lapply(dir_list, read_track_results, strata = strata) 
+
+quality_list <- lapply(tracks, assess_quality, strata = strata)
+
+quality <- do.call(rbind, lapply(quality_list,data.frame))
+
+quality %>% print()
+```
+
+
+# All experiments are ordered by theri VOT
+```{r}
+quality %>% 
+  arrange(VOT,desc(Exp_Tracks)) %>% 
+  print
+```
+```{r}
+quality %>% 
+  ungroup() %>%
+  group_by(Metadata_id) %>%
+  summarise(mean_vot = mean(VOT)) %>% 
+  arrange(mean_vot) %>%
+  print
+```
+```{r}
+quality %>% 
+  ungroup() %>%
+  group_by(Metadata_condition) %>%
+  summarise(mean_vot = mean(VOT)) %>% 
+  arrange(mean_vot) %>%
+  print
+```
+
+
+To assess the tracking quality in one view it is usefull to plot the distribution of the VOT and the fraction valid tracks. 
+```{r}
+ggplot(quality, aes(VOT)) +
+  geom_histogram(binwidth = 0.025)
+
+ggplot(quality, aes(Exp_Valid_Track_Fraction)) +
+  geom_histogram(binwidth = 0.04)
+
+ggplot(quality,aes(x = VOT,y = Exp_Tracks))  +
+  geom_point(aes(colour = Metadata_condition, shape = Metadata_matrix))
+```
+
+```

@@ -1,0 +1,146 @@
+---
+title: "load_data"
+author: "TB"
+date: "5/15/2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("readr")
+library("tibble")
+library("dplyr")
+library("tidyr")
+library("stringr")
+library("ggplot2")
+library("purrr")
+library("broom")
+library("dplyr")
+library("tsne")
+library("ggfortify")
+library("cluster")
+library('magrittr')
+# load cytominer 
+
+```
+
+In this notebook we compare the migration results of the CP tracking with the matlab tracking results. 
+The matlab tracking is used as a standard and not changed.  
+
+Only three videos are used for this comparison
+Metadata_id gn0017 with
+*  Metadata_condition == control, and 
+* Metadata_condition == CP17 & dose 0.5 and 
+* Metadata_condition == CP17 & dose 5 
+
+These are randomly chosen. We limit ourselves to three so we are able to fastly iterate through different parameter settings for CP. 
+
+
+# Load tracking data tracking data 
+
+```{r}
+# define grouping variables 
+strata <- c('Metadata_id','Metadata_condition','Metadata_dose','Metadata_date','Metadata_matrix')
+
+# load matlab data 
+population_matlab <- read_csv('../../../analysis/2017_04_28_matlab/clean_tracks.csv') %>%
+  group_by_(.dots = strata)
+
+population_matlab %<>% 
+  filter( (Metadata_id == 'gn0017')) %>%
+  filter( Metadata_condition == 'control' | ( Metadata_condition == 'CP17' & (Metadata_dose == 0.5 | Metadata_dose == 5))) %>%
+  group_by_(.dots = strata)
+
+population_cp_lap <- read.csv('../../../analysis/2017_06_morph_gradient_lap/TrackeddetectedNeutros.csv') %>%
+   rename(Metadata_timePoint = Metadata_frame) %>%
+   group_by_(.dots =  c(strata,'TrackObjects_Label')) %>%
+   arrange(Metadata_timePoint) %>%
+   cytominer::track(., c(strata,'TrackObjects_Label')) %>%
+   group_by_(.dots = strata) 
+
+population_cp_lap_1p <- read.csv('../../../analysis/2017_07_morph_gradient_lap_1phase/TrackeddetectedNeutros.csv') %>%
+   rename(Metadata_timePoint = Metadata_frame) %>%
+   group_by_(.dots =  c(strata,'TrackObjects_Label')) %>%
+   arrange(Metadata_timePoint) %>%
+   cytominer::track(., c(strata,'TrackObjects_Label')) %>%
+   group_by_(.dots = strata)   
+
+population_cp <- read.csv('../../../analysis/2017_06_morph_gradient/TrackeddetectedNeutros.csv') %>%
+   rename(Metadata_timePoint = Metadata_frame) %>%
+   group_by_(.dots =  c(strata,'TrackObjects_Label_30')) %>%
+   arrange(Metadata_timePoint) %>%
+   cytominer::track(., c(strata,'TrackObjects_Label_30')) %>%
+   group_by_(.dots = strata) 
+
+
+
+```
+
+assess the tracking quality using cytominer::assess
+```{r}
+quality_list <-  list(cytominer::assess(population_matlab, 20, strata),
+  cytominer::assess(population_cp, 20, strata),
+  cytominer::assess(population_cp_lap, 20, strata),
+  cytominer::assess(population_cp_lap_1p, 20, strata))
+
+quality_list[[1]] %<>% 
+  mutate(algorithm = 'MATLAB') %>% 
+  mutate(Metadata_id = tolower(Metadata_id))
+
+quality_list[[2]] %<>% 
+  mutate(algorithm = 'CP') %>% 
+  mutate(Metadata_id = tolower(Metadata_id))
+
+quality_list[[3]] %<>% 
+  mutate(algorithm = 'CP LAP') %>% 
+  mutate(Metadata_id = tolower(Metadata_id))
+
+quality_list[[4]] %<>% 
+  mutate(algorithm = 'CP LAP 1P') %>% 
+  mutate(Metadata_id = tolower(Metadata_id))
+
+quality2 <- do.call(rbind, quality_list)
+
+```
+
+
+# All experiments are ordered by theri VOT
+```{r}
+ggplot(data = quality2, aes(x = VOT, y = Exp_Valid_Tracks, color = algorithm, shape = Metadata_dose)) +
+  geom_point() 
+  # coord_fixed() 
+  #xlim(0,1) +
+  #ylim(0,1)
+```
+
+```{r}
+ggplot(data = quality2, aes(x = Exp_Mean_Track_Life_Time, y = Exp_Valid_Tracks, color = algorithm, shape = Metadata_dose)) +
+  geom_point() 
+
+
+```
+
+```{r}
+quality2 %>% 
+  ungroup() %>%
+  group_by_('algorithm') %>%
+  summarise(vot = mean(VOT),
+            track_length = mean(Exp_Mean_Track_Life_Time)) %>%
+  print
+
+quality2 %>% 
+  ungroup() %>%
+  group_by(Metadata_condition, Metadata_dose) %>%
+  summarise(vot = mean(VOT),
+            track_length = mean(Exp_Mean_Track_Life_Time)) %>%
+  print
+
+```
+```{r}
+quality2 %>% 
+  ungroup() %>%
+  group_by(algorithm,Metadata_condition, Metadata_dose) %>%
+  summarise(mean_vot = mean(VOT)) %>% 
+  arrange(mean_vot) %>%
+  print
+```
