@@ -112,12 +112,12 @@ displayClustersWithHeatmap(W2, spectralClustering(W2, K = 5))
 
 ```{r}
 sigma = 0.5
-for (sigma in seq(0.3, 0.8, 0.1)) {
+for (sigma in seq(0.2, 2, 0.2)) {
   for (neighbours in seq(20,20,5)) {
     
-    W1 <- affinityMatrix(dist_cp, K = 16, sigma = sigma)
-    W2 <- affinityMatrix(dist_migration, K = 16, sigma = sigma)
-    W = SNF(list(W1,W2), neighbours, 20, parallel = FALSE)
+    W1 <- affinityMatrix(dist_cp, K = neighbours, sigma = sigma)
+    W2 <- affinityMatrix(dist_migration, K = neighbours, sigma = sigma)
+    W = SNF(list(W1,W2), neighbours, 40, parallel = FALSE)
     
     
     row.names(W) <- aggregated_migration %>% 
@@ -134,51 +134,67 @@ metadata_rows <- aggregated_migration %>%
   ungroup() %>%
   select_(.dots = strata) 
 
-fraction_strong_affinity(W,metadata_rows)
+group_by = c("Metadata_matrix", "Metadata_condition", "Metadata_dose")
+
+fraction_strong_affinity(W,metadata_rows, group_by)
 
 affinity = tibble()
-for (sigma in seq(0.3, 0.8, 0.05)) {
-  for (neighbours in seq(2,20,2)) {
-    
+for (sigma in seq(.02, 1, 0.02)) {
+  for (neighbours in seq(2,40,1)) {
+   
     W1 <- affinityMatrix(dist_cp, K = neighbours, sigma = sigma)
     W2 <- affinityMatrix(dist_migration, K = neighbours, sigma = sigma)
     W = SNF(list(W1,W2), neighbours, neighbours, parallel = FALSE)
     
-    affinity <-  fraction_strong_affinity(W,metadata_rows) %>%
+    affinity <-  fraction_strong_affinity(W,metadata_rows, group_by) %>%
       mutate(sigma = sigma, K = neighbours) %>%
       rbind(.,affinity)
-  
   }
+  print(c(sigma,neighbours))
 }
 ```
 
 ```{r}
-matrix_t <- affinity %>% extract2("threshold") %>% matrix(., nrow = 11, byrow = TRUE)
-matrix_a <- affinity %>% extract2("mean_affinity") %>% matrix(., nrow = 11, byrow = TRUE)
+# remove affinity values close to zero
+df <- affinity %>%
+  filter(sigma > 0.02)
 
-corrplot(matrix_a)
-
-test_matrix <- melt(matrix_a) 
-
-ggplot(affinity, aes(x = sigma, y = K)) +
+ggplot(df, aes(x = sigma, y = K)) +
   geom_raster(aes(fill = mean_affinity)) +
-  scale_fill_gradient(low = "grey90", high = "red") + 
+  scale_fill_gradient(low = "white", high = "red") + 
   theme_bw() + theme(axis.text.x=element_text(size=9, angle=0, vjust=0.3),
                      axis.text.y=element_text(size=9),
                      plot.title=element_text(size=11))
 
+ggsave("mean_affinity.pdf",device = "pdf")
 
-ggplot(affinity, aes(x = sigma, y = K)) +
+ggplot(df, aes(x = sigma, y = K)) +
   geom_raster(aes(fill = threshold)) +
-  scale_fill_gradient(low = "grey90", high = "red") + 
+  scale_fill_gradient(low = "white", high = "red") + 
   theme_bw() + theme(axis.text.x=element_text(size=9, angle=0, vjust=0.3),
                      axis.text.y=element_text(size=9),
                      plot.title=element_text(size=11))
 
-ggplot(affinity, aes(x = sigma, y = K)) +
+ggsave("null_threshold.pdf",device = "pdf")
+
+ggplot(df, aes(x = sigma, y = K)) +
   geom_raster(aes(fill = fraction_strong)) +
-  scale_fill_gradient(low = "grey90", high = "red") + 
+  scale_fill_gradient(low = "white", high = "red") + 
   theme_bw() + theme(axis.text.x=element_text(size=9, angle=0, vjust=0.3),
                      axis.text.y=element_text(size=9),
-                     plot.title=element_text(size=11))
+                     plot.title=element_text(size=11)) + 
+  labs( y = "neighbours K")
+
+ggsave("fraction_strong.pdf",device = "pdf")
+```
+```{r}
+affinity %>% 
+  arrange(-fraction_strong) %>%
+  slice(1:40)
+  print()
+```
+
+```{r}
+ fraction_strong_affinity(W1,metadata_rows, group_by)
+ fraction_strong_affinity(W2,metadata_rows, group_by)
 ```
