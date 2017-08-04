@@ -1,0 +1,69 @@
+---
+title: "load_data"
+author: "TB"
+date: "5/15/2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("tidyverse")
+library("magrittr")
+library("mixtools")
+```
+
+I
+
+# Load data 
+## load tracks 
+```{r}
+csv_in <- 'clean_tracks.csv'
+analysis_folder <- '../../../analysis/2017_04_28_matlab/'
+strata <- c('Metadata_condition','Metadata_dose','Metadata_id','Metadata_date','Metadata_matrix')
+
+df <- read_csv(file.path(analysis_folder,csv_in)) %>% 
+  group_by_(.dots = strata)
+```
+
+
+```{r}
+population <- df %>% filter(Track_Length > 1, Track_Life_Time > 1)
+
+population %>% 
+  filter(Track_Length > 19) %>%
+  filter(Track_Speed < 20) %>%
+  filter(Track_One_Cell == 1) %>%
+  ggplot(data = .) +
+    aes(x = Track_Speed) +
+    geom_histogram(binwidth = 0.5) +
+    scale_x_continuous(minor_breaks = seq(0 , 20, 0.2), breaks = seq(0, 20, 1) ) +
+    facet_wrap(Metadata_matrix ~ Metadata_condition,scales = "free")
+
+
+
+
+```
+```{r}
+population %>% 
+  filter(Metadata_condition == "CP17", Metadata_matrix == "FN",Track_Length > 19) %>%
+  ggplot(data = .) +
+    aes(x = Track_Speed) +
+    geom_histogram(binwidth = 0.5) +
+    scale_x_continuous(minor_breaks = seq(0 , 20, 0.2), breaks = seq(0, 20, 1) )
+```
+    
+```{r}
+
+speed <- population %>%
+  filter(Metadata_condition == "SP17", Metadata_matrix == "FN", Track_Length > 19, Track_Speed < 20) %>%
+  extract2("Track_Speed")
+
+my_em <- normalmixEM( speed, mu = c(3,6,9), sigma=c(1,1,1), sd.constr=c(1,1,1) )
+
+my_em$mu
+myEM$lambda 
+
+d  <- density(speed)
+plot(d)
+```
+

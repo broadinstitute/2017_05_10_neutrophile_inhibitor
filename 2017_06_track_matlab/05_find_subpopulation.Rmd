@@ -257,6 +257,12 @@ subpopulation_speed %>%
     ggplot(data = .) +
     aes(Metadata_condition, running) + 
     geom_boxplot()
+
+subpopulation_speed %>% 
+  filter(Track_Sector == "positive sector") %>%
+    ggplot(data = .) +
+    aes(Metadata_condition, sneaking) + 
+    geom_boxplot()
 ```
 ```{r}
 subpopulation_speed %>% 
@@ -282,6 +288,7 @@ s1 <- subpopulation_speed %>%
 
 s2 <- subpopulation_speed %>% 
   filter(Track_Sector == "positive sector") %>%
+  filter(Metadata_id != 'gn0017') %>%
   filter(Metadata_dose == 5) %>%
   filter(Metadata_condition == "CP17") %>%
   print
@@ -295,10 +302,4 @@ test <- fn %>% select(Metadata_id, Metadata_condition, Metadata_dose, running, w
   print
 
 gather(test, pace, value, running)
-
 ```
-
-```{r}
-iris %>% print
-```
-

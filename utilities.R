@@ -67,7 +67,7 @@ fraction_strong_affinity <- function(W, metadata_rows, group_by) {
   Wt <-  W %>% cbind(.,metadata_rows) %>%
     select(-Metadata_id) %>%
     group_by_(.dots = group_by) %>%
-    summarise_each(funs(mean)) %>%
+    summarise_each(funs(median)) %>%
     ungroup() %>%
     select(-Metadata_condition, -Metadata_dose, -Metadata_matrix, -Metadata_date) %>%
     t 
@@ -75,7 +75,7 @@ fraction_strong_affinity <- function(W, metadata_rows, group_by) {
   M <- cbind(metadata_rows, Wt) %>%
     select(-Metadata_id) %>%
     group_by(Metadata_matrix, Metadata_condition, Metadata_dose) %>%
-    summarise_each(funs(mean)) %>%
+    summarise_each(funs(median)) %>%
     ungroup() %>%
     select(-Metadata_condition, -Metadata_dose, -Metadata_matrix, -Metadata_date) %>%
     as.matrix()

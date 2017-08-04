@@ -200,13 +200,15 @@ for (id in ids) {
 
 ```{r}
 population %>% 
+  mutate(Track_Speed = Track_Speed / 60) %>%
   filter(Track_Length > 20) %>%
   filter(Metadata_matrix == "FN") %>%
   filter(Metadata_condition  == "CP17") %>%
-  filter(Metadata_dose == "50") %>%
+  #filter(Metadata_dose == "50") %>%
   ggplot(data = .) +
     aes(x = Track_Speed) +
-    geom_histogram(binwidth = 0.3)
+    geom_histogram(binwidth = 0.005) +
+    scale_x_continuous(minor_breaks = seq(0 , 0.25, 0.005), breaks = seq(0, 0.25, 0.02) )
 ```
 
 

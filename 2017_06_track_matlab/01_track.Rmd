@@ -38,16 +38,10 @@ speed_scale <- pixel_size * 2
 df <- read_csv(file.path(data_dir, csv_in))
 df %<>% dplyr::mutate(Metadata_frame = as.double(Metadata_timePoint)) 
 
-df %>% mutate(Location_Center_X = speed_scale * Location_Center_X)
-
 #The data contains tracking data for neutrophils from different conditions. The datasets 
 #can be ditinguished using the Metadata columns defined in strata. 
 track_label = c('TrackObjects_Label')
 
-population %>% 
-  filter(Metadata_id == 'gn0017') %>%
-  group_by(Metadata_condition, Metadata_dose) %>%
-  slice(1)
 ```
 # Cleanup 
 Cleanup! Gyde provided a list with frames / videos with an possible technical error. We remove these data.

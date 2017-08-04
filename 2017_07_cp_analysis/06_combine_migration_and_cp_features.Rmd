@@ -112,7 +112,7 @@ displayClustersWithHeatmap(W2, spectralClustering(W2, K = 5))
 
 ```{r}
 sigma = 0.5
-for (sigma in seq(0.2, 2, 0.2)) {
+for (sigma in seq(0.5, 0.5, 0.1)) {
   for (neighbours in seq(20,20,5)) {
     
     W1 <- affinityMatrix(dist_cp, K = neighbours, sigma = sigma)
@@ -144,7 +144,7 @@ for (sigma in seq(.02, 1, 0.02)) {
    
     W1 <- affinityMatrix(dist_cp, K = neighbours, sigma = sigma)
     W2 <- affinityMatrix(dist_migration, K = neighbours, sigma = sigma)
-    W = SNF(list(W1,W2), neighbours, neighbours, parallel = FALSE)
+    W = SNF(list(W1,W2), neighbours, 20, parallel = FALSE)
     
     affinity <-  fraction_strong_affinity(W,metadata_rows, group_by) %>%
       mutate(sigma = sigma, K = neighbours) %>%
@@ -166,7 +166,7 @@ ggplot(df, aes(x = sigma, y = K)) +
                      axis.text.y=element_text(size=9),
                      plot.title=element_text(size=11))
 
-ggsave("mean_affinity.pdf",device = "pdf")
+ggsave("mean_affinity.png",device = "png")
 
 ggplot(df, aes(x = sigma, y = K)) +
   geom_raster(aes(fill = threshold)) +
@@ -175,7 +175,7 @@ ggplot(df, aes(x = sigma, y = K)) +
                      axis.text.y=element_text(size=9),
                      plot.title=element_text(size=11))
 
-ggsave("null_threshold.pdf",device = "pdf")
+ggsave("null_threshold.png",device = "png")
 
 ggplot(df, aes(x = sigma, y = K)) +
   geom_raster(aes(fill = fraction_strong)) +
@@ -185,7 +185,7 @@ ggplot(df, aes(x = sigma, y = K)) +
                      plot.title=element_text(size=11)) + 
   labs( y = "neighbours K")
 
-ggsave("fraction_strong.pdf",device = "pdf")
+ggsave("fraction_strong.png",device = "png")
 ```
 ```{r}
 affinity %>% 
@@ -197,4 +197,66 @@ affinity %>%
 ```{r}
  fraction_strong_affinity(W1,metadata_rows, group_by)
  fraction_strong_affinity(W2,metadata_rows, group_by)
+```
+```{r}
+  W1 <- affinityMatrix(dist_cp, K = 4, sigma = 0.94)
+    W2 <- affinityMatrix(dist_migration, K = 4, sigma = 0.94)
+    W = SNF(list(W1,W2), 4, 20, parallel = FALSE)
+    
+    
+    row.names(W) <- aggregated_migration %>% 
+      mutate(id = str_c(Metadata_id, Metadata_matrix, Metadata_condition, Metadata_dose, sep = ' ')) %>%
+      extract2("id")
+    displayClustersWithHeatmap(W, spectralClustering(W, K = 10))
+```
+
+
+#################################################
+
+This time we use the data collapsed to tracks to calculate the affinity matrix
+
+
+```{r}
+dist_tracks_cp <- population_cp %>%
+  ungroup() %>%
+  filter(Metadata_matrix == "HEM") %>%
+  filter(Metadata_condition == "CP17") %>%
+  filter(Metadata_id == "BD0069" ) %>%
+  select_(.dots = feature_cp) %>%
+  dist() %>%
+  as.matrix()
+
+
+dist_tracks_migration <- population_migration %>%
+  ungroup() %>%
+  filter(Metadata_matrix == "HEM") %>%
+  filter(Metadata_condition == "CP17") %>%
+    filter(Metadata_id == "BD0069" ) %>%
+  select_(.dots = feature_migration) %>%
+  dist() %>%
+  as.matrix()
+
+```
+
+
+```{r}
+K = 10
+sigma = 1
+
+W1_tracks <- affinityMatrix(dist_tracks_cp, K = K, sigma = sigma)
+W2_tracks <- affinityMatrix(dist_tracks_migration, K = K, sigma = sigma)
+
+displayClustersWithHeatmap(W1_tracks, spectralClustering(W1_tracks, K = 6))
+displayClustersWithHeatmap(W2_tracks, spectralClustering(W2_tracks, K = 6))
+
+W = SNF(list(W1_tracks,W2_tracks), K, 20, parallel = FALSE)
+
+row.names(W) <- population_migration %>% 
+  filter(Metadata_matrix == "HEM") %>%
+  filter(Metadata_condition == "CP17") %>%
+  filter(Metadata_id == "BD0069" ) %>%
+  mutate(id = str_c(Metadata_dose, TrackObjects_Label_30, sep = ' ')) %>%
+  extract2("id")
+displayClustersWithHeatmap(W, spectralClustering(W, K = 24))
+
 ```

@@ -1,0 +1,75 @@
+---
+title: "load_data"
+author: "TB"
+date: "5/15/2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("tidyverse")
+```
+
+08/03/2017 
+For some tracks the directionality was greater one. This notebook was used to debug the code. 
+
+It was traced back to tracks with "jumps" over one or more frames. Cytominer could not track these cells correctly. 
+
+Fixed as of 08/03/2018
+
+# Load data 
+## load tracks 
+```{r}
+csv_in <- 'clean_tracks.csv'
+analysis_folder <- '../../../analysis/2017_04_28_matlab/'
+strata <- c('Metadata_condition','Metadata_dose','Metadata_id','Metadata_date','Metadata_matrix')
+
+df <- read_csv(file.path(analysis_folder,csv_in)) %>% 
+  group_by_(.dots = strata)
+```
+# load single cell data
+```{r}
+single_cell_data <- 'TrackeddetectedNeutros.csv'
+cells <- read_csv(file.path(analysis_folder, single_cell_data)) 
+
+cells$Metadata_dose[is.na(cells$Metadata_dose)] <- 'None'
+
+cells %>% mutate(Metadata_dose = as.double(Metadata_dose))
+  
+```
+
+```{r}
+population <- df %>% filter(Track_Length > 1, Track_Life_Time > 1)
+
+```
+Which tracks have infinite Directionality?
+```{r}
+df_inf_tracks <- population %>% 
+  ungroup() %>%
+  filter(Track_Directionality == "Inf") %>%
+  slice(1) %>%
+  select_(.dots = c(strata,'Track_Directionality','TrackObjects_Label')) 
+
+df_inf_cell <- semi_join(cells, df_inf_tracks, by = c(strata, 'TrackObjects_Label')) %>%
+  print
+
+df_inf_cell %>% 
+  select(Location_Center_X, Location_Center_Y, Metadata_timePoint) %>% 
+  print
+```
+```{r}
+  df_inf_cell <- dplyr::group_by_(df_inf_cell,.dots = c('TrackObjects_Label', strata)) %>%
+  arrange(Metadata_timePoint) %>% 
+  print
+  f3 <- cytominer::track(df_inf_cell, c('TrackObjects_Label',  strata)) %>% 
+    print
+  
+```
+
+```{r}
+population %>% 
+  select(Track_Directionality) %>% 
+  arrange(-Track_Directionality) %>% 
+  print
+```
+

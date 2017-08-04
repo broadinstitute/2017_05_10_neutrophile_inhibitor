@@ -43,5 +43,7 @@ result_gyde <- left_join(
 
 write_csv(result_gyde, file.path(analysis_folder, csv_out))
 
+result_gyde %>% print
+
 ```
 

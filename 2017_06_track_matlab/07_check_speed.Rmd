@@ -1,0 +1,86 @@
+---
+title: "load_data"
+author: "TB"
+date: "5/15/2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("tidyverse")
+```
+
+I
+
+# Load data 
+## load tracks 
+```{r}
+csv_in <- 'clean_tracks.csv'
+analysis_folder <- '../../../analysis/2017_04_28_matlab/'
+strata <- c('Metadata_condition','Metadata_dose','Metadata_id','Metadata_date','Metadata_matrix')
+
+df <- read_csv(file.path(analysis_folder,csv_in)) %>% 
+  group_by_(.dots = strata)
+```
+# load single cell data
+```{r}
+single_cell_data <- 'TrackeddetectedNeutros.csv'
+cells <- read_csv(file.path(analysis_folder, single_cell_data)) 
+
+cells$Metadata_dose[is.na(cells$Metadata_dose)] <- 'None'
+
+cells %>% mutate(Metadata_dose = as.double(Metadata_dose))
+  
+```
+
+quick check how the cp tracked data looks like
+```{r}
+population_cp <- read_csv("../../../analysis/2017_morph_gradient_3/tracks_cp.csv")
+
+population_cp %>% select(Track_Speed) %>% arrange(-Track_Speed) %>% print
+```
+
+```{r}
+population <- df %>% filter(Track_Length > 1, Track_Life_Time > 1)
+
+```
+
+The fastest cells 
+```{r}
+df_fast_tracks <- population %>% 
+  select_(.dots = c(strata, "Track_Speed","TrackObjects_Label_30", "Track_One_Cell", "Track_Length", "Track_Life_Time")) %>%
+  filter(Track_One_Cell) %>%
+  ungroup() %>%
+  arrange(-Track_Speed) %>%
+  slice(1:100) %>%
+  print
+```
+
+Now we check single cells
+```{r}
+
+df_fast_cell <- right_join(cells, df_fast_tracks, by = c(strata, 'TrackObjects_Label')) %>%
+  select(Metadata_id, Metadata_matrix, Metadata_condition, Metadata_dose, Track_Length, Track_Life_Time, TrackObjects_Label, everything()) %>%
+  print
+```
+The tracks with a high speed consists of two different paths. Specially the experiment with id = GN0055 has several fast cells.
+Example: 
+* gn0055, HEM, CP17, 5, TrackObjects_Label 28. 
+* Track_Length and Track_Life_Time are 3 but the current track has 7 entries in frames c(1,3,4,5,6,21,22)  
+
+We load the single cell information extracted using MATLAB and check whats going on. 
+```{r}
+df_single_cells <- read.csv('/Users/tbecker/Documents/2017_03_08_neutrophile_migration_becker/2017_04_05_CP17/images/CP17_HEM/260913 gn0050 cp17 in hem/gn0050_hem_il8_cp17_5/results/featureList.csv')
+
+df_single_cells %>% filter(TrackObjects_Label == 28) %>% print
+
+```
+The single cell data looks good. 
+
+Next step: check how the single cell data of all experiments are collected
+
+One error: file 
+Metadata_complete had an error:
+* control experiment of gn0055 had the wrong metadata, it was tracked as CP17 with dose = 5. As a result we had tracks with the same id! 
+* check file track_and_export_matlab.Rmd in the 2017_03
+* tracked_neutros %>% filter(Metadata_matrix == "HEM", Metadata_id == "gn0055",TrackObjects_Label == 28) %>% print()   
