@@ -24,7 +24,7 @@ library("cluster")
 library("magrittr")
 library("knitr")
 library("corrplot")
-source("windrose.r")
+source("../windrose.r")
 ```
 
 
@@ -44,15 +44,22 @@ are normalized:
 
 
 ```{r}
-csv_tracks <- 'tracks.csv'
-csv_normalized <- 'normalized.csv'
-data_dir <- '../../analysis/2017_04_28_matlab/'
+csv_tracks <- 'clean_tracks.csv'
+csv_normalized <- 'clean_normalized.csv'
+analysis_folder <- '../../../analysis/2017_04_28_matlab/'
 strata <- c('Metadata_condition','Metadata_dose','Metadata_id','Metadata_date','Metadata_matrix')
 
-normalized <- read_csv(file.path(data_dir, csv_normalized)) %>%
+tracks <- read_csv(file.path(analysis_folder, csv_tracks)) %>%
   select(Metadata_id,Metadata_matrix, Metadata_condition, Metadata_dose, everything() ) %>%
   arrange(Metadata_id, Metadata_matrix, Metadata_condition, Metadata_dose) %>%
   group_by_(.dots = strata) 
+
+normalized <- read_csv(file.path(analysis_folder, csv_normalized)) %>%
+  select(Metadata_id,Metadata_matrix, Metadata_condition, Metadata_dose, everything() ) %>%
+  arrange(Metadata_id, Metadata_matrix, Metadata_condition, Metadata_dose) %>%
+  group_by_(.dots = strata) 
+
+
 ```
 Small trajectories are removed and the angles are scaled to [-pi, pi] and rotated 
 (using cytominer::track the angles were calculated with 0 degree set to three o 
@@ -62,10 +69,12 @@ Small trajectories of neutrophils that are observred less than 20 frames are rem
 ```{r}
 # angles are scaled to the intervale (-pi, pi)
 population <- tracks %>%
-  filter(Track_Length > 19) %>%
+  filter(Track_Length > 9) %>%
   mutate(Track_Angle = Track_Angle + pi/2) %>% # rotate all angles by 90 degree or pi/2
   mutate(Track_Angle = ifelse(Track_Angle > pi, Track_Angle - 2*pi, Track_Angle) ) %>%
   mutate(Track_Angle = ifelse(Track_Angle < 0, Track_Angle + 2*pi, Track_Angle) ) 
+
+
 ```
 
 ## Quality 
@@ -74,7 +83,7 @@ all migration run in FN and HEM we use the VOT (valid observation time).
 
 ```{r}
 quality <- tracks %>% 
-  cytominer::assess(min_path_length = 19)
+  cytominer::assess(min_path_length = 9)
 
 quality %>% 
   ungroup() %>%
@@ -98,7 +107,7 @@ ggplot(data = quality %>% filter(Metadata_matrix == 'HEM'),
   ggtitle("Track Quality for migration in HEM (high VOT is good)")
 ```
 
-Results: the migration in HEM shows a higher VOT compared to FN. Do we see a significant difference? Answer: yes, we get p = 0.0216 
+Results: the migration in HEM shows a higher VOT compared to FN. Do we see a significant difference? Answer: yes, we get p = 0.0353 
 ```{r}
 x <- quality %>% filter(Metadata_matrix == "FN")
 y <- quality %>% filter(Metadata_matrix == "HEM")
@@ -111,7 +120,7 @@ Note: for the following analysis we do not normalized data!
 ```{r}
 population %>% 
   ungroup() %>% 
-  filter(Metadata_condition != "water") %>%
+  #filter(Metadata_condition != "water") %>%
   group_by(Metadata_condition,Metadata_matrix ) %>%
   summarise(mean_speed = mean(Track_Speed), sd_speed = sd(Track_Speed))
 ```
@@ -122,13 +131,9 @@ show a very high standard deviation. Hmm...
 population %>% 
   ungroup() %>% 
   group_by(Metadata_id, Metadata_dose) %>%
-  filter(Metadata_condition != "water") %>%
-  filter(Metadata_matrix == "FN", Metadata_condition == "CP17") %>%
+  filter(Metadata_matrix == "HEM", Metadata_condition == "vehicle") %>%
   summarise(mean_speed = mean(Track_Speed), sd_speed = sd(Track_Speed))
 
-# remove gn0055
-population %<>% 
-  filter(Metadata_condition != "water", Metadata_id != "gn0055")
 ```
 
 We remove our outlier and look again. This looks much nicer :)
@@ -219,7 +224,7 @@ For the further analysis, we use normalized data. The normalization was performe
 ```{r}
 summary_speed <- normalized %>% 
   ungroup() %>%
-  filter(Metadata_id != "gn0055") %>%
+  #filter(Metadata_id != "gn0055") %>%
   group_by(Metadata_matrix, Metadata_condition, Metadata_dose) %>%
   summarise(mean_speed = mean(Track_Speed),std_speed = sd(Track_Speed))
   
@@ -301,7 +306,7 @@ t.test(x$positive, y$positive)
 ```
 
 ```{r}
-ggplot(data = normalized %>% filter(Metadata_matrix == 'HEM', Metadata_condition != 'water'), aes(x = Metadata_condition, y = Track_Speed)) +
+ggplot(data = normalized %>% filter(Metadata_matrix == 'HEM'), aes(x = Metadata_condition, y = Track_Speed)) +
   geom_boxplot( ) +
   ggtitle("Migration in HEM (normalized)")
 ```
@@ -370,5 +375,9 @@ t.test(x$Track_xFMI, y$Track_xFMI )
 t.test(x$Track_Directionality, y$Track_Directionality )  
 ```
 ```{r}
-normalized %>% ungroup() %>% filter(Metadata_condition == "vehicle") %>% group_by_(.dots = strata) %>% slice(1) %>% knitr::kable()
+normalized %>% 
+  ungroup() %>% 
+  filter(Metadata_condition == "vehicle") %>% 
+  group_by_(.dots = strata) %>% slice(1) %>% 
+  knitr::kable()
 ```

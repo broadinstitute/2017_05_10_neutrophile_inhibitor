@@ -36,6 +36,8 @@ analysis_folder <- '../../../analysis/2017_04_28_matlab/'
 
 # grouping variables 
 strata <- c('Metadata_condition','Metadata_dose','Metadata_id','Metadata_date','Metadata_matrix')
+
+
 ```
 
 # load data 
@@ -47,6 +49,7 @@ population <- read_csv(file.path(analysis_folder, csv_tracks)) %>%
   mutate(Metadata_condition = replace(Metadata_condition, Metadata_condition == "water", "vehicle")) %>%
   filter(Track_Length > 19)
 
+population %>% select(Track_Speed) %>% print
 ```
 
 We define the variables for normalization and use cytominer::normalize
@@ -61,11 +64,13 @@ normalized <-
     population = population,
     variables = feature_var,
     strata =  "Metadata_id",
-    sample = population %>% filter(Metadata_condition == "vehicle"),
+    sample = population %>% filter(Metadata_condition == "vehicle", Metadata_matrix == "FN"),
     operation = "robustize"
   )
 
 normalized %<>% dplyr::collect() 
+
+normalized %>% select(Track_Speed) %>% print
 
 ```
 

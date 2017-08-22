@@ -10,7 +10,6 @@ knitr::opts_chunk$set(echo = TRUE)
 library("tidyverse")
 ```
 
-I
 
 # Load data 
 ## load tracks 
@@ -48,8 +47,9 @@ population <- df %>% filter(Track_Length > 1, Track_Life_Time > 1)
 The fastest cells 
 ```{r}
 df_fast_tracks <- population %>% 
-  select_(.dots = c(strata, "Track_Speed","TrackObjects_Label_30", "Track_One_Cell", "Track_Length", "Track_Life_Time")) %>%
+  select_(.dots = c(strata, "Track_Speed","TrackObjects_Label", "Track_One_Cell", "Track_Length", "Track_Life_Time")) %>%
   filter(Track_One_Cell) %>%
+  filter(Track_Life_Time > 19) %>%
   ungroup() %>%
   arrange(-Track_Speed) %>%
   slice(1:100) %>%

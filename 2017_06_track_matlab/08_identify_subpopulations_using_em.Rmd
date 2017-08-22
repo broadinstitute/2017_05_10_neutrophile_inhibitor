@@ -17,7 +17,7 @@ I
 # Load data 
 ## load tracks 
 ```{r}
-csv_in <- 'clean_tracks.csv'
+csv_in <- 'clean_normalized.csv'
 analysis_folder <- '../../../analysis/2017_04_28_matlab/'
 strata <- c('Metadata_condition','Metadata_dose','Metadata_id','Metadata_date','Metadata_matrix')
 
@@ -49,7 +49,7 @@ population %>%
   ggplot(data = .) +
     aes(x = Track_Speed) +
     geom_histogram(binwidth = 0.5) +
-    scale_x_continuous(minor_breaks = seq(0 , 20, 0.2), breaks = seq(0, 20, 1) )
+    scale_x_continuous(minor_breaks = seq(-10 , 10, 0.2), breaks = seq(0, 20, 1) )
 ```
     
 ```{r}
@@ -61,7 +61,7 @@ speed <- population %>%
 my_em <- normalmixEM( speed, mu = c(3,6,9), sigma=c(1,1,1), sd.constr=c(1,1,1) )
 
 my_em$mu
-myEM$lambda 
+my_em$lambda 
 
 d  <- density(speed)
 plot(d)

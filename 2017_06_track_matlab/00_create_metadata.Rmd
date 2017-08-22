@@ -13,107 +13,74 @@ knitr::opts_chunk$set(echo = TRUE)
 library("tidyverse")
 library("magrittr")
 ```
+# Collect MATLAB tracking data 
+The segmentation results and features of the matlab tracking are collected as a single data frame and combined with the metadata stored in a separate file. 
+
+One big data frame is created and stored in the analysis folder. 
+
+## Input
+
+The matlab tracking data for each of the 94 experiments has its own folder that is stored in the file 'complete_metadata.csv'. In each folder, the single cell data can be found in a file called featureList.csv. 
 
 ```{r}
-
-
-data_dir <- "../../../../2017_04_05_CP17/images/"
+data_folder <- "../../../../2017_04_05_CP17/images/"
 csv_identifier <- "featureList.csv"
 metadata_file <- "../../../../../2017_03_08_neutrophile_migration_becker/2017_04_05_CP17/complete_metadata.csv"
-
-metadata <- read_csv(metadata_file) %>%
-  print()
-
 ```
 
+Output 
+The folder analysis_folder stores all results. Here 
 ```{r}
-  
+analysis_folder <- '../../../analysis/2017_04_28_matlab/'
+csv_single_cell_data <- 'TrackeddetectedNeutros.csv'
+
+metadata <- read_csv(metadata_file) %>%
+  rename(Metadata_condition = Metadata_dose_1) %>%
+  print()
+
 experiment_list <- metadata %>%
   extract2("File_Path")
 
+strata <- c('Metadata_condition','Metadata_dose','Metadata_id','Metadata_date','Metadata_matrix')
+```
+Metadata_date is missing, we add it using previously tracked data 
+```{r}
+df_temp <- read_csv(file.path(analysis_folder, 'normalized.csv')) %>% 
+  select(Metadata_id, Metadata_matrix, Metadata_dose, Metadata_condition, Metadata_date) %>% 
+  group_by_(.dots = strata) %>% 
+  slice(1) %>%
+  print
+
+metadata %<>% 
+  mutate(Metadata_condition = replace(Metadata_condition, Metadata_condition == 'cont', 'control')) %>% 
+  mutate(Metadata_condition = replace(Metadata_condition, Metadata_condition == 'vehi', 'vehicle')) %>%
+  left_join(.,df_temp) %>% print
+
+
+```
+We read all files s
+
+```{r}
+read_file <- function(path){
+  read_csv(file.path(path,csv_identifier))
+}
+
+df_list <- map(experiment_list, read_file)
+```
+
+```{r}
+df_list2 <- list()
 for (i in 1:nrow(metadata)){
-  print(file.path(metadata$File_Path[[i]],'featureList.csv'))
-  data <- read_csv(file.path(metadata$File_Path[[i]],'featureList.csv'))
+  df_list2[[i]] = cbind2(metadata %>% 
+                            slice(rep(i, each = nrow(df_list[[i]]))),
+                         df_list[[i]])
 }
+```
+
+```{r}
+df <- do.call(rbind, df_list2) 
+
+write_csv(df, file.path(analysis_folder, csv_single_cell_data))
 
 ```
 
-
-
-
-
-x <- metadata %>% 
-  mutate(Metadata_id = substr(Metadata,1,6)) %>% 
-  mutate(Metadata_matrix = substr(Metadata,8,10)) %>%
-  mutate(Metadata_condition = substr(Metadata,11,length(Metadata) )) %>%
-  mutate(metadata_matrix2 =  as.numeric(grepl("fn", Metadata_matrix, ignore.case = TRUE)) +
-                        2 * as.numeric(grepl("hem", Metadata_matrix, ignore.case = TRUE)) ) %>% 
-  mutate(metadata_condition2 = as.character( as.numeric(grepl("vehi", Metadata_condition, ignore.case = TRUE)) +
-                        2 * as.numeric(grepl("kon", Metadata_condition, ignore.case = TRUE))  +
-                        4 * as.numeric(grepl(c("0.5","0,5"), Metadata_condition, ignore.case = TRUE))  +
-                        8 * as.numeric(grepl("asser", Metadata_condition, ignore.case = TRUE))  +  
-                        16 * as.numeric(grepl("50", Metadata_condition, ignore.case = TRUE)))
-    ) %>% 
-  print
- 
-x$metadata_condition2 <- replace(x$metadata_condition2, x$metadata_condition2 == 0, ' 5')
-x$metadata_condition2 <- replace(x$metadata_condition2, x$metadata_condition2 == 1, 'vehi')
-x$metadata_condition2 <- replace(x$metadata_condition2, x$metadata_condition2 == 2, 'cont')
-x$metadata_condition2 <- replace(x$metadata_condition2, x$metadata_condition2 == 4, ' 0.5')
-x$metadata_condition2 <- replace(x$metadata_condition2, x$metadata_condition2 == 8, 'water')
-x$metadata_condition2 <- replace(x$metadata_condition2, x$metadata_condition2 == 16, ' 50')
-   
- 
-
-x$metadata_matrix2 <- replace(x$metadata_matrix2, x$metadata_matrix2 == 1, 'FN')
-x$metadata_matrix2 <- replace(x$metadata_matrix2, x$metadata_matrix2 == 2, 'HEM')
-
-split_path <- function(x) {
-  if (dirname(x) == x) x else c(basename(x),split_path(dirname(x)))
-}
-
-y <- cell_data$result_dir %>%
-  split_path(.) %>% 
-  data.frame(m = .) %>% 
-  dplyr::slice((2*76 + 1):(3*76)) %>%
-  mutate(metadata_inhibitor =  as.numeric(grepl("CP17", m, ignore.case = TRUE)) + 
-                           2 * as.numeric(grepl("SP17", m, ignore.case = TRUE))) 
-
-y$metadata_inhibitor <- replace(y$metadata_inhibitor, y$metadata_inhibitor == 1, "CP17")
-y$metadata_inhibitor <- replace(y$metadata_inhibitor, y$metadata_inhibitor == 2, "SP17")
-
-metadata <- cbind(x,Metadata_inhibitor =y$metadata_inhibitor) 
-
-metadata <- metadata %>%  select(Metadata_id, metadata_matrix2, metadata_condition2, Metadata_inhibitor) %>%
-  rename(Metadata_matrix = metadata_matrix2, Metadata_condition = metadata_condition2)
-
-s <-  cbind( metadata,c(cell_data$result_dir))
-  
-write_csv(s,metadata_file)
-```
-
-
-data_dir <- "../../../../2017_04_05_CP17/images/"
-csv_identifier <- "featureList.csv"
-
-cell_data <- read_profiles(data_dir, csv_identifier) 
-
-tracked_neutros <- cell_data$data %>% 
-  rename(Metadata_timePoint = ImageNumber) %>% 
-  rename(Location_Center_X = AreaShape_Center_X) %>% 
-  rename(Location_Center_Y = AreaShape_Center_Y)  
-
-
-split_path <- function(x) {
-  if (dirname(x)==x) x else c(basename(x),split_path(dirname(x)))
-}
-
-x <- cell_data$result_dir %>%
-  split_path(.) %>% 
-  print
-
-
-x 
-```
-
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

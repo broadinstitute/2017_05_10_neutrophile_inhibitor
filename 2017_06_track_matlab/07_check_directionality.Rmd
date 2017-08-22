@@ -39,7 +39,9 @@ cells %>% mutate(Metadata_dose = as.double(Metadata_dose))
 ```
 
 ```{r}
-population <- df %>% filter(Track_Length > 1, Track_Life_Time > 1)
+population <- df %>% filter(Track_Length > 1, Track_Life_Time > 1) 
+
+
 
 ```
 Which tracks have infinite Directionality?
@@ -68,8 +70,11 @@ df_inf_cell %>%
 
 ```{r}
 population %>% 
+  #filter(Track_Life_Time > 19) %>% 
   select(Track_Directionality) %>% 
   arrange(-Track_Directionality) %>% 
   print
+
+
 ```
 
