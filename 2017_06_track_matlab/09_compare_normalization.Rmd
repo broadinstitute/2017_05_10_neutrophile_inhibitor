@@ -1,0 +1,327 @@
+---
+title: "load_data"
+author: "TB"
+date: "07/07/2017"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("tidyverse")
+library("magrittr")
+source("../multiplot.r")
+```
+# How does different normalization schemes affect our tracking data 
+This notebooks compares tracking data normalization using different methods and using different control groups.
+
+Our data set consists of cell tracking data run with different conditions.
+
+Each time series characterizes the chemotaxis of neutrophils in an in vitro assay. In the analysed experiments the chemoattractant interleukin 8 was used to create an gradient that directs from the left border of the images / channel to the left channel.
+For each patient or experiment id ("Metadata_id") a set of five (FN) or six (HEM) time series were recorded consisting of 
+* one control run, "Metadata_condition" = "control"
+* one vehicle run, "Metadata_condition" = "vehicle"
+* three runs with "Metadata_condition" "CP17" or "SP17" in with different doses Metadata_dose = c(0.5, 5, 50)
+
+The experiments for each patient are either run in the matrix HEM or FN specified as "Metadata_matrix" = "FN" or "HEM". For all patients that have been run in HEM, one additional run with "Metadata_condition" = "vehicle" was run using the matrix "FN". 
+
+Given these data we normalize all runs that belong to one patient on three different ways:
+1. Experiments are normalized using the control group 
+2. Experiments are normalized using the vehicle group of the corredpsonding matrix. 
+3. Experiemnts are normlaized using the vehicle gorup using matrix FN. 
+
+Normalization 3 makes it possible to compare the different experiments run in different matrices. 
+
+# Load data 
+Load tracking data created using MATLAB as normalized and not normalized data. 
+
+```{r}
+csv_tracks <- 'clean_tracks.csv'
+csv_normalized <- 'clean_normalized.csv'
+analysis_folder <- '../../../analysis/2017_04_28_matlab/'
+```
+
+Experiments are groupes by condition, dose, id, data and matrix
+```{r}
+# grouping variables 
+strata <- c('Metadata_condition','Metadata_dose','Metadata_id','Metadata_date','Metadata_matrix')
+```
+
+Read the csv
+```{r} 
+df <- read_csv(file.path(analysis_folder, csv_tracks)) %>%
+  filter(Track_Length > 19) 
+  # filter(Metadata_id != "ej0005") %>%
+  # filter(Metadata_id != "bd0069")
+```
+
+All IDs run in HEM and in FN
+```{r}
+df_id_matrix <- df %>%
+  filter(Metadata_condition == "control") %>%
+  select(Metadata_id, Metadata_matrix) %>%
+  group_by(Metadata_id) %>%
+  slice(1) %>%
+  print
+```
+
+We define the variables for normalization 
+```{r}
+feature_var = c("Track_Speed","Track_Speed_Y","Track_Speed_X","Track_xFMI","Track_yFMI","Track_Directionality","Track_Distance_Traveled","Track_CI")
+```
+# optionally we can run 
+
+```{}
+population <- cytominer::generalized_log(population, variables = feature_var)
+```
+
+```{r}
+population <- df 
+#%>% filter(Track_Sector %in% c(1,2) )
+```
+
+# normalize against control group
+
+```{r}
+# define control group
+sample <- population %>% filter(Metadata_condition == "control") 
+  
+
+normalized <-
+  cytominer::normalize(
+    population = population,
+    variables = feature_var,
+    strata =  "Metadata_id",
+    sample = sample,
+    operation = "standardize"
+  ) 
+
+# collapse data to single experiments 
+experiments <- 
+  cytominer::aggregate(
+    population = normalized,
+    variables = feature_var,
+    strata  = c("Metadata_matrix","Metadata_id", "Metadata_condition", "Metadata_dose"),
+    operation = "mean" 
+  )
+
+dose <- 
+  cytominer::aggregate(
+    population = normalized,
+    variables = feature_var,
+    strata  = c("Metadata_matrix","Metadata_dose","Metadata_condition"),
+    operation = "mean" 
+  )
+
+```
+
+```{r}
+p1 <- ggplot(data = experiments %>%  
+    filter(Metadata_matrix == "FN")) + 
+  aes(x = Track_Speed, y = Track_xFMI, shape = factor(Metadata_condition), color = Metadata_dose )  +
+  geom_point()
+
+p2 <- ggplot(data = dose %>%  
+    filter(Metadata_matrix == "FN")) +
+  aes(x = Track_Speed, y = Track_xFMI, shape = factor(Metadata_condition), color = Metadata_dose )  +
+  geom_point()
+
+p3 <- ggplot(data = experiments %>%  
+    filter(Metadata_matrix == "HEM") ) + 
+  aes(x = Track_Speed, y = Track_xFMI, shape = factor(Metadata_condition), color = Metadata_dose )  +
+  geom_point()
+
+p4 <- ggplot(data = dose %>%  
+    filter(Metadata_matrix == "HEM")) +
+  aes(x = Track_Speed, y = Track_xFMI, shape = factor(Metadata_condition), color = Metadata_dose )  +
+  geom_point()
+
+multiplot(p1, p2, p3, p4, cols=1)
+```
+
+
+# normalize against vehicle group
+
+```{r}
+# define control group
+id_hem <- df_id_matrix %>%
+  filter(Metadata_matrix == "HEM") %>%
+  extract2("Metadata_id") %>% 
+  print 
+
+```
+```{r}
+sample <- population %>% 
+  filter(Metadata_condition == "vehicle") %>%
+  filter( !((Metadata_id %in% id_hem) & (Metadata_matrix == "FN") ))
+
+population2 <-  population %>% 
+  filter( !((Metadata_id %in% id_hem) & (Metadata_matrix == "FN") ))
+
+sample %>% select(Metadata_matrix, Metadata_id) %>% group_by(Metadata_id, Metadata_matrix) %>% slice(1) %>% print
+```  
+```{r}
+normalized <-
+  cytominer::normalize(
+    population = population2,
+    variables = feature_var,
+    strata =  "Metadata_id",
+    sample = sample,
+    operation = "standardize"
+  )  %>% 
+  filter(Metadata_dose %in% c(5,50))
+
+# collapse data to single experiments 
+experiments <- 
+  cytominer::aggregate(
+    population = normalized,
+    variables = feature_var,
+    strata  = c("Metadata_matrix","Metadata_id", "Metadata_condition", "Metadata_dose"),
+    operation = "mean" 
+  )
+
+dose <- 
+  cytominer::aggregate(
+    population = normalized,
+    variables = feature_var,
+    strata  = c("Metadata_matrix","Metadata_dose","Metadata_condition"),
+    operation = "mean" 
+  )
+
+```
+
+```{r}
+normalized %>% 
+  group_by(Metadata_condition, Metadata_dose, Metadata_matrix, Metadata_id) %>% 
+  filter(Metadata_dose == 5, Metadata_condition == "SP17") %>%
+  summarise(mean_speed = mean(Track_Speed))
+
+p1 <- ggplot(data = experiments %>%  
+    filter(Metadata_matrix == "FN")
+  ) + 
+  aes(x = Track_Speed, y = Track_xFMI, shape = factor(Metadata_condition), color = Metadata_dose )  +
+  geom_point()
+
+p2 <- ggplot(data = dose %>%  
+    filter(Metadata_matrix == "FN")) +
+  aes(x = Track_Speed, y = Track_xFMI, shape = factor(Metadata_condition), color = Metadata_dose )  +
+  geom_point()
+
+p3 <- ggplot(data = experiments %>%  
+    filter(Metadata_matrix == "HEM") ) + 
+  aes(x = Track_Speed, y = Track_xFMI, shape = factor(Metadata_condition), color = Metadata_dose )  +
+  geom_point()
+
+p4 <- ggplot(data = dose %>%  
+    filter(Metadata_matrix == "HEM")) +
+  aes(x = Track_Speed, y = Track_xFMI, shape = factor(Metadata_condition), color = Metadata_dose )  +
+  geom_point()
+
+multiplot(p1, p2, p3, p4, cols=1)
+```
+
+
+
+# normalize against vehicle / FN
+
+```{r}
+# define control group
+sample <- population %>% filter(Metadata_condition == "vehicle", Metadata_matrix == "FN")
+
+normalized <-
+  cytominer::normalize(
+    population = population %>% filter(Metadata_id != "bd0055"),
+    variables = feature_var,
+    strata =  "Metadata_id",
+    sample = sample,
+    operation = "standardize"
+  ) 
+
+# collapse data to single experiments 
+experiments <- 
+  cytominer::aggregate(
+    population = normalized,
+    variables = feature_var,
+    strata  = c("Metadata_matrix","Metadata_id", "Metadata_condition", "Metadata_dose"),
+    operation = "mean" 
+  )
+
+dose <- 
+  cytominer::aggregate(
+    population = normalized,
+    variables = feature_var,
+    strata  = c("Metadata_matrix","Metadata_dose","Metadata_condition"),
+    operation = "mean" 
+  )
+```
+```{r}
+p1 <- ggplot(data = experiments %>%  
+    filter(Metadata_matrix == "FN")) + 
+  aes(x = Track_Speed, y = Track_xFMI, shape = factor(Metadata_condition), color = Metadata_dose )  +
+  geom_point()
+
+p2 <- ggplot(data = dose %>%  
+    filter(Metadata_matrix == "FN")) +
+  aes(x = Track_Speed, y = Track_xFMI, shape = factor(Metadata_condition), color = Metadata_dose )  +
+  geom_point()
+
+p3 <- ggplot(data = experiments %>%  
+    filter(Metadata_matrix == "HEM") ) + 
+  aes(x = Track_Speed, y = Track_xFMI, shape = factor(Metadata_condition), color = Metadata_dose )  +
+  geom_point()
+
+p4 <- ggplot(data = dose %>%  
+    filter(Metadata_matrix == "HEM")) +
+  aes(x = Track_Speed, y = Track_xFMI, shape = factor(Metadata_condition), color = Metadata_dose )  +
+  geom_point()
+
+multiplot(p1, p2, p3, p4, cols=1)
+```
+# Not normalized at all 
+
+```{r}
+# collapse data to single experiments 
+experiments <- 
+  cytominer::aggregate(
+    population = population,
+    variables = feature_var,
+    strata  = c("Metadata_matrix","Metadata_id", "Metadata_condition", "Metadata_dose"),
+    operation = "mean" 
+  )
+
+dose <- 
+  cytominer::aggregate(
+    population = population,
+    variables = feature_var,
+    strata  = c("Metadata_matrix","Metadata_dose","Metadata_condition"),
+    operation = "mean" 
+  )
+```
+
+```{r}
+p1 <- ggplot(data = experiments %>%  
+    filter(Metadata_matrix == "FN")) + 
+  aes(x = Track_Speed, y = Track_xFMI, shape = factor(Metadata_condition), color = Metadata_dose, geom_tile("FN") )  +
+  geom_point()
+
+p2 <- ggplot(data = dose %>%  
+    filter(Metadata_matrix == "FN")) +
+  aes(x = Track_Speed, y = Track_xFMI, shape = factor(Metadata_condition), color = Metadata_dose )  +
+  geom_point() 
+
+p3 <- ggplot(data = experiments %>%  
+    filter(Metadata_matrix == "HEM") ) + 
+  aes(x = Track_Speed, y = Track_xFMI, shape = factor(Metadata_condition), color = Metadata_dose )  +
+  geom_point() 
+
+p4 <- ggplot(data = dose %>%  
+    filter(Metadata_matrix == "HEM")) +
+  aes(x = Track_Speed, y = Track_xFMI, shape = factor(Metadata_condition), color = Metadata_dose )  +
+  geom_point() 
+
+multiplot(p1, p2, p3, p4, cols=1)
+
+```
+
+
