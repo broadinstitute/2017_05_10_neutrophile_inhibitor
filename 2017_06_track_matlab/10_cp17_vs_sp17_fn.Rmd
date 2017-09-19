@@ -157,7 +157,7 @@ Analysis of migration run FN with inhibitor CP17 vs. control experiment run with
 * CP17 and SP17 differ significantly with  p-value = 8.563e-06
 
 ```{r}
-ttest_dose(feature = "Track_Speed")
+ttest_dose(feature = "Track_Speed", dose = 50)
 ```
 
 ### Summary Track_Directionality
@@ -166,7 +166,8 @@ ttest_dose(feature = "Track_Speed")
 * CP17 has an significantly decreased directionality with p-value = 0.01268
 
 ```{r}
-ttest_dose(feature = "Track_Directionality")
+ttest_dose(feature = "Track_Directionality", dose = 50
+  )
 ```
 ### Summary Track_xFMI
 * Migration in CP17 is decreased by 22%. As the xFMI is negative, the xFMI becomes even more directed! 
@@ -178,7 +179,7 @@ population %>%
   filter(Metadata_dose == 5, Metadata_matrix == "FN") %>%
   summarise(xFMI = mean(Track_xFMI))
 
-ttest_dose(feature = "Track_xFMI")
+ttest_dose(feature = "Track_xFMI", dose = 5)
 
 ```
 ```{r}
@@ -383,5 +384,14 @@ normalized %>%
     ggplot(data = .) +
   aes(x = Metadata_dose, y = Track_xFMI, fill = Metadata_matrix) +
   geom_boxplot()
-
 ```
+```{r}
+normalized %>% 
+  filter(Metadata_dose != 0.5, Metadata_condition != "control") %>% 
+  group_by(Metadata_matrix,Metadata_condition, Metadata_dose, Metadata_id) %>%
+  slice(1) %>%
+  group_by(Metadata_matrix, Metadata_condition, Metadata_dose) %>%
+  summarise(n = n())
+  print
+```
+

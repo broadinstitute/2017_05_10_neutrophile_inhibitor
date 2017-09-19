@@ -27,6 +27,7 @@ For each patient or experiment id ("Metadata_id") a set of five (FN) or six (HEM
 The experiments for each patient are either run in the matrix HEM or FN specified as "Metadata_matrix" = "FN" or "HEM". For all patients that have been run in HEM, one additional run with "Metadata_condition" = "vehicle" was run using the matrix "FN". 
 
 
+
 # Load data 
 Load tracking data created using MATLAB. 
 ```{r}
@@ -35,12 +36,13 @@ csv_normalized <- 'clean_normalized.csv'
 analysis_folder <- '../../../analysis/2017_04_28_matlab/'
 
 df <- read_csv(file.path(analysis_folder, csv_tracks)) %>%
-  filter(Track_Length > 19) 
+  filter(Track_Length > 19) %>%
+  select(-Metadata_date)
 ```
 Experiments are groupes by condition, dose, id, data and matrix
 ```{r}
 # grouping variables 
-strata <- c('Metadata_condition','Metadata_dose','Metadata_id','Metadata_date','Metadata_matrix')
+strata <- c('Metadata_condition','Metadata_dose','Metadata_id','Metadata_matrix')
 ```
 
 List all IDs and the matrix used in this experiment (either HEM or FN).
@@ -48,7 +50,7 @@ List all IDs and the matrix used in this experiment (either HEM or FN).
 df_id_matrix <- df %>%
   filter(Metadata_condition == "control") %>%
   select(Metadata_id, Metadata_matrix) %>%
-  group_by(Metadata_id) %>%
+  group_by(Metadata_matrix, Metadata_id) %>%
   slice(1) %>%
   print
 ```
@@ -157,7 +159,7 @@ Analysis of migration run FN with inhibitor CP17 vs. control experiment run with
 * CP17 and SP17 differ significantly with  p-value = 4.834e-08
 
 ```{r}
-ttest_dose(feature = "Track_Speed")
+ttest_dose(feature = "Track_Speed", dose = 50)
 ```
 
 ### Summary Track_Directionality
@@ -174,6 +176,11 @@ ttest_dose(feature = "Track_Directionality")
 * CP17 shows a not significantly decreased xFMI compared to SP17 with 0.1148.
 ```{r}
 #  
+# always consider https://www.ncbi.nlm.nih.gov/pmc/articles/PMC2959222/
+sem <- function(x){
+  sd(x) / sqrt(x)
+}
+
 population %>% 
   filter(Metadata_dose == 5, Metadata_matrix == "FN") %>%
   summarise(xFMI = mean(Track_xFMI))
@@ -229,16 +236,21 @@ return(t)
 ```
 ## Sectoranalysis
 ```{r}
-ttest_dose_sector_complete(sector = 1, feature = "Track_Speed")
-ttest_dose_sector_complete(sector = 1, feature = "Track_Directionality")
-ttest_dose_sector_complete(sector = 1, feature = "Track_xFMI")
+ttest_dose_sector_complete(sector = 1, dose = 5, feature = "Track_Speed")
+ttest_dose_sector_complete(sector = 1, dose = 5, feature = "Track_Directionality")
+ttest_dose_sector_complete(sector = 1, dose = 5, feature = "Track_xFMI")
+ttest_dose_sector_complete(sector = 2, dose = 5, feature = "Track_Speed")
+ttest_dose_sector_complete(sector = 2, dose = 5, feature = "Track_Directionality")
+ttest_dose_sector_complete(sector = 2, dose = 5, feature = "Track_xFMI")
 ```
 
-
 ```{r}
-ttest_dose_sector_complete(sector = 2, feature = "Track_Speed")
-ttest_dose_sector_complete(sector = 2, feature = "Track_Directionality")
-ttest_dose_sector_complete(sector = 2, feature = "Track_xFMI")
+ttest_dose_sector_complete(sector = 1, dose = 50, feature = "Track_Speed")
+ttest_dose_sector_complete(sector = 1, dose = 50, feature = "Track_Directionality")
+ttest_dose_sector_complete(sector = 1, dose = 50, feature = "Track_xFMI")
+ttest_dose_sector_complete(sector = 2, dose = 50, feature = "Track_Speed")
+ttest_dose_sector_complete(sector = 2, dose = 50, feature = "Track_Directionality")
+ttest_dose_sector_complete(sector = 2, dose = 50, feature = "Track_xFMI")
 ```
 We observe no difference in the number of trakcs in each sector. 
 ```{r}
@@ -301,7 +313,7 @@ Summary:
   * more runner in SP17 with dose = 5     0.0002
                          and dose = 50    0.8584
 ```{r}
-movements %>%  
+subpopulation_speed <- movements %>%  
   ungroup() %>% 
   group_by(Metadata_dose, Metadata_condition) %>%
   summarise(mean_sneaker = mean(sneaker), #sd_sneaker = sd(sneaker),
@@ -370,4 +382,336 @@ normalized %>%
   aes(x = Metadata_dose, y = Track_xFMI, fill = Metadata_matrix) +
   geom_boxplot()
 
+```
+```{r}
+# always consider https://www.ncbi.nlm.nih.gov/pmc/articles/PMC2959222/
+sem <- function(x){
+  sd(x) / sqrt(x)
+}
+```
+
+# Export data as csv
+Data is anonymized and the Metadata_id is removed 
+```{r}
+experiment_id <- read_delim(file.path(analysis_folder, "experiment_id.csv"), delim = '\t') %>% 
+  mutate(Metadata_id = stringr::str_to_lower(Metadata_id)) %>% 
+  print
+
+normalized_anon <- inner_join(normalized, experiment_id, by = "Metadata_id") 
+```
+
+Export single cell data
+```{r}
+csv_in <- 'TrackeddetectedNeutros.csv'
+single_cell_data <- read.csv(file.path(analysis_folder, csv_in))
+single_cell_data <- inner_join(single_cell_data, experiment_id, by = "Metadata_id") 
+
+single_cell_data %>% select(-brightness, -Metadata_id, -File_Path, -Metadata_date, -starts_with("Area"), -experimentID ) %>% 
+  select(Experiment_id, everything()) %>% 
+  write_csv(file.path(analysis_folder, "single_cell_data.csv"))
+
+```
+
+
+Write summary of all conditions (speed, directionality, xfmi)
+```{r}
+normalized %>% 
+  filter(Metadata_condition != "control", Metadata_dose != 0.5) %>%
+  group_by(Metadata_matrix, Metadata_condition, Metadata_dose) %>% 
+  summarise(
+    "mean directionality" = mean(Track_Directionality), "sem directionality" = sd(Track_Directionality) / sqrt(n()),
+    "mean speed in µm/sec" = mean(Track_Speed), "sem speed" = sd(Track_Speed) / sqrt(n()),
+    "mean xFMI" = mean(Track_xFMI), "sem xFMI" = sd(Track_xFMI) / sqrt(n()),
+     n = n()
+  ) %>%
+  write_csv(file.path(analysis_folder, "analysis.csv"))
+```
+
+Write summary per sector
+```{r}
+normalized %>% 
+  filter(Metadata_condition != "control", Metadata_dose != 0.5) %>%
+  group_by(Metadata_matrix, Metadata_condition, Metadata_dose, Track_Sector) %>% 
+  summarise(
+    "mean directionality" = mean(Track_Directionality), "sem directionality" = sd(Track_Directionality) / sqrt(n()),
+    "mean speed in µm/sec" = mean(Track_Speed), "sem speed" = sd(Track_Speed) / sqrt(n()),
+    "mean xFMI" = mean(Track_xFMI), "sem xFMI" = sd(Track_xFMI) / sqrt(n()),
+     n = n()
+  ) %>% 
+  write_csv(file.path(analysis_folder, "sector_analysis.csv"))
+```
+
+Write 
+```{r}
+tracks_per_experiment <- normalized_anon %>% 
+   filter(Metadata_condition != "control", Metadata_dose != 0.5) %>%
+  select(Experiment_id, Metadata_matrix, Metadata_condition, Metadata_dose, everything()) %>% 
+  group_by(Metadata_matrix, Experiment_id, Metadata_condition, Metadata_dose) %>% 
+  summarise(Tracks_per_Experiment = n()) %>% print
+
+inner_join(normalized_anon, tracks_per_experiment, by = c("Metadata_matrix", "Experiment_id", "Metadata_condition", "Metadata_dose") ) %>%
+  filter(Metadata_condition != "control", Metadata_dose != 0.5) %>%
+  select(Experiment_id, Metadata_matrix, Metadata_condition, Metadata_dose, Track_Sector, everything()) %>% 
+  group_by(Metadata_matrix, Experiment_id, Metadata_condition, Metadata_dose, Track_Sector) %>% 
+  print %>%
+  summarise(
+    "mean directionality" = mean(Track_Directionality), "sem directionality" = sd(Track_Directionality) / sqrt(n()),
+    "mean speed in µm/sec" = mean(Track_Speed), "sem speed" = sd(Track_Speed) / sqrt(n()),
+    "mean xFMI" = mean(Track_xFMI), "sem xFMI" = sd(Track_xFMI) / sqrt(n()),
+     n = n(), "fraction per sector in % " = n() / mean(Tracks_per_Experiment) ) %>%
+  write_csv(file.path(analysis_folder, "sector_analysis_per_experiment.csv"))
+
+```
+
+Export trajectories 
+```{r}
+normalized_anon %>% 
+  filter(Metadata_condition != "control", Metadata_dose != 0.5) %>%
+  select(
+    Experiment_id, 
+    Metadata_matrix, 
+    Metadata_condition, 
+    Metadata_dose, 
+    TrackObjects_Label, 
+    Track_Angle, 
+    Track_Speed, 
+    Track_Directionality,
+    Track_xFMI
+    ) %>% 
+  rename(
+    "speed in µm/sec" = Track_Speed,
+    "angle in radiant" = Track_Angle,
+    "directionality" = Track_Directionality,
+    "xFMI" = Track_xFMI
+    ) %>%
+  group_by(Metadata_matrix, Experiment_id, Metadata_condition, Metadata_dose) %>%
+  write_csv(file.path(analysis_folder, "trajecotories.csv"))
+```
+
+
+```{r}
+quantiles <- normalized %>% 
+  filter(Metadata_condition == "vehicle") %>%
+  filter(Metadata_matrix == "HEM") %>%
+  extract2("Track_Speed") %>%
+  quantile(.,probs = c(.25, .75)) %>% 
+  as.vector()
+
+movements <- normalized %>% 
+  filter(Metadata_matrix == "HEM",Metadata_dose != 0.5, Metadata_dose != "control") %>%
+  mutate(sneaker = (Track_Speed < quantiles[[1]])) %>%
+  mutate(walker = ( (Track_Speed > quantiles[[1]] )  & ( Track_Speed < quantiles[[2]] ) ) )  %>%
+  mutate(runner = (Track_Speed > quantiles[[2]])) %>%
+  print
+
+subpopulation_speed <- movements %>%  
+  ungroup() %>% 
+  group_by(Metadata_dose, Metadata_condition) %>%
+  summarise("mean sneaker" = mean(sneaker), "sem sneaker" = sd(sneaker)/sqrt(n()), 
+            "mean walker" = mean(walker), "sem walker" = sd(walker)/sqrt(n()),
+            "mean runner" = mean(runner), "sem runner" = sd(runner)/sqrt(n()), 
+            n = n()
+    ) %>% print
+
+subpopulation_speed %>% 
+  write_csv(file.path(analysis_folder, "subpopulation_speed_hem.csv"))
+```
+
+
+```{r}
+quantiles <- normalized %>% 
+  filter(Metadata_condition == "vehicle",  !((Metadata_id %in% id_hem) & (Metadata_matrix == "FN") ) ) %>%
+  filter(Metadata_matrix == "FN") %>%
+  extract2("Track_Speed") %>%
+  quantile(.,probs = c(.25, .75)) %>% 
+  as.vector()
+
+movements <- normalized %>% 
+  filter(Metadata_matrix == "FN",Metadata_dose != 0.5, Metadata_dose != "control") %>%
+  mutate(sneaker = (Track_Speed < quantiles[[1]])) %>%
+  mutate(walker = ( (Track_Speed > quantiles[[1]] )  & ( Track_Speed < quantiles[[2]] ) ) )  %>%
+  mutate(runner = (Track_Speed > quantiles[[2]])) %>%
+  print
+
+subpopulation_speed <- movements %>%  
+  ungroup() %>% 
+  group_by(Metadata_dose, Metadata_condition) %>%
+  summarise("mean sneaker" = mean(sneaker), "sem sneaker" = sd(sneaker)/sqrt(n()),
+            "mean walker" = mean(walker), "sem walker" = sd(walker)/sqrt(n()),
+            "mean runner" = mean(runner), "sem runner" = sd(runner)/sqrt(n()), 
+            n = n()
+    ) %>% print
+
+subpopulation_speed %>% 
+  write_csv(file.path(analysis_folder, "subpopulation_speed_fn.csv"))
+```
+## Export for plots in PRISM
+1. Change of Speed in HEM for SP17/CP17 with dose 0.5 and 5 
+2. Change of Directionality in HEM for SP17/CP17 with dose 0.5 and 5
+3. Change of xFMI in HEM for SP17/CP17 with dose 0.5 and 5 
+4. Change of Speed in FN for SP17/CP17 with dose 0.5 and 5 
+5. Change of Directionality in FN for SP17/CP17 with dose 0.5 and 5
+6. Change of xFMI in FN for SP17/CP17 with dose 0.5 and 5 
+```{r}
+normalized %>% 
+  filter(Metadata_condition == "CP17") %>% 
+    ggplot(data = .) +
+  aes(x = Metadata_dose, y = Track_Speed, fill = Metadata_matrix) +
+  geom_boxplot()
+
+normalized %>% 
+  filter(Metadata_condition == "CP17") %>% 
+    ggplot(data = .) +
+  aes(x = Metadata_dose, y = Track_Directionality, fill = Metadata_matrix) +
+  geom_boxplot()
+
+normalized %>% 
+  filter(Metadata_condition == "CP17") %>% 
+    ggplot(data = .) +
+  aes(x = Metadata_dose, y = Track_xFMI, fill = Metadata_matrix) +
+  geom_boxplot()
+
+sector_fraction <- normalized %>% 
+  filter(Metadata_dose != 0.5) %>%
+  group_by_(.dots = strata) %>%
+  summarise(positive = sum(Track_Positive_Sector) / n(), 
+            negative = sum(Track_Negative_Sector) / n(),
+            neutral_up = sum(Track_Neutral_Sector_Up) / n(),
+            neutral_down = sum(Track_Neutral_Sector_Down) / n()
+    ) %>% 
+  print
+```
+```{r}
+df <- 
+  normalized %>% 
+  filter(Metadata_dose != 0.5, Metadata_condition != "control", Metadata_matrix == "HEM") 
+
+ggplot(data = df) +
+  aes(y = Track_Speed, fill = Metadata_condition, x = Metadata_dose) + 
+  geom_boxplot(notch = TRUE) 
+
+ggplot(data = df) +
+  aes(y = Track_Directionality, fill = Metadata_condition, x = Metadata_dose) + 
+  geom_boxplot(notch = TRUE) 
+
+ggplot(data = df) +
+  aes(y = Track_xFMI, fill = Metadata_condition, x = Metadata_dose) + 
+  geom_boxplot(notch = TRUE) 
+
+```
+```{r}
+df <- 
+  normalized %>% 
+  filter(Metadata_dose != 0.5, Metadata_condition != "control", Metadata_matrix == "FN") 
+
+ggplot(data = df) +
+  aes(y = Track_Speed, fill = Metadata_condition, x = Metadata_dose) + 
+  geom_boxplot(notch = TRUE) 
+
+ggplot(data = df) +
+  aes(y = Track_Directionality, fill = Metadata_condition, x = Metadata_dose) + 
+  geom_boxplot(notch = TRUE) 
+
+ggplot(data = df) +
+  aes(y = Track_xFMI, fill = Metadata_condition, x = Metadata_dose) + 
+  geom_boxplot(notch = TRUE) 
+
+```
+Plot for roseplots
+```{r}
+# roseplot 1: FN, vehicle
+normalized %>%  
+  filter(Metadata_condition == "vehicle",  
+    !((Metadata_id %in% id_hem) & (Metadata_matrix == "FN") ) ) %>% 
+  select(Track_Angle) %>%
+write_csv(file.path(analysis_folder, "roseplot_fn_vehicle.csv"))
+
+# roseplot 2: FN, CP17, 5
+normalized %>%  
+  filter(
+    Metadata_dose == 5, 
+    Metadata_condition == "CP17",
+    Metadata_matrix == "FN" ) %>% 
+  select(Track_Angle) %>%
+  write_csv(file.path(analysis_folder, "roseplot_fn_CP17_5.csv"))
+
+# roseplot 3: FN, CP17, 50
+normalized %>%  
+  filter(
+    Metadata_dose == 50, 
+    Metadata_condition == "CP17",
+    Metadata_matrix == "FN" ) %>% 
+  select(Track_Angle) %>%
+  write_csv(file.path(analysis_folder, "roseplot_fn_CP17_50.csv"))
+
+# roseplot 4: FN, SP17, 5
+normalized %>%  
+  filter(
+    Metadata_dose == 5, 
+    Metadata_condition == "SP17",
+    Metadata_matrix == "FN") %>% 
+  select(Track_Angle) %>%
+  write_csv(file.path(analysis_folder, "roseplot_fn_SP17_5.csv"))
+
+# roseplot 5: FN, SP17, 50
+normalized %>%  
+  filter( 
+    Metadata_dose == 50, 
+    Metadata_condition == "SP17",
+    Metadata_matrix == "FN") %>% 
+  select(Track_Angle) %>%
+  write_csv(file.path(analysis_folder, "roseplot_fn_SP17_50.csv"))
+
+# roseplot 6: HEM, vehicle
+normalized %>%  
+  filter(
+    Metadata_condition == "vehicle",  
+   Metadata_matrix == "HEM") %>% 
+  select(Track_Angle) %>%
+  write_csv(file.path(analysis_folder, "roseplot_hem_vehicle.csv"))
+
+# roseplot 7: HEM, CP17, 5
+normalized %>%  
+  filter(
+    Metadata_dose == 5, 
+    Metadata_condition == "CP17",
+    Metadata_matrix == "HEM") %>% 
+  select(Track_Angle) %>%
+  write_csv(file.path(analysis_folder, "roseplot_HEM_CP17_5.csv"))
+
+# roseplot 8: HEM, CP17, 50
+normalized %>%  
+  filter(
+    Metadata_dose == 50, 
+    Metadata_condition == "CP17",
+    Metadata_matrix == "HEM") %>% 
+  select(Track_Angle) %>%
+  write_csv(file.path(analysis_folder, "roseplot_hem_CP17_50.csv"))
+
+# roseplot 9: HEM, SP17, 5
+normalized %>%  
+  filter(
+    Metadata_dose == 5, 
+    Metadata_condition == "SP17",
+    Metadata_matrix == "HEM") %>%  
+  select(Track_Angle) %>%
+  write_csv(file.path(analysis_folder, "roseplot_hem_SP17_5.csv"))
+
+# roseplot 10: HEM, SP17, 50
+normalized %>%  
+  filter(
+    Metadata_dose == 50, 
+    Metadata_condition == "SP17",
+     Metadata_matrix == "HEM") %>%
+  select(Track_Angle) %>%
+  write_csv(file.path(analysis_folder, "roseplot_hem_SP17_50.csv"))
+
+```
+
+number of tracks per condition
+```{r}
+normalized %>% 
+  filter(Metadata_matrix == "FN") %>% 
+  group_by(Metadata_matrix, Metadata_condition, Metadata_dose) %>%
+  summarise(n = n())
 ```

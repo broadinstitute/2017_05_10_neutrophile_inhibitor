@@ -14,8 +14,8 @@ plot.windrose <- function(data,
   palette = "YlGnBu",
   countmax = NA,
   debug = 0,
-  scale_name = "Speed in µm/min",
-  title_name = "Rose plot"){
+  scale_name = "Speed in µm/second",
+  title_name = "Distribution of angle and speed"){
   
   
   # Look to see what data was passed in to the function

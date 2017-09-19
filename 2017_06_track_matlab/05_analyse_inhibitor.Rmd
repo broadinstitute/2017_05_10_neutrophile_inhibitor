@@ -25,6 +25,9 @@ library("magrittr")
 library("knitr")
 library("corrplot")
 source("../windrose.r")
+library("destiny")
+library("scatterplot3d")
+library("car")
 ```
 
 
@@ -83,7 +86,7 @@ all migration run in FN and HEM we use the VOT (valid observation time).
 
 ```{r}
 quality <- tracks %>% 
-  cytominer::assess(min_path_length = 9)
+  neutrominer::assess(min_path_length = 9)
 
 quality %>% 
   ungroup() %>%
@@ -171,12 +174,14 @@ test_data <- population %>%
   filter(Metadata_matrix == "HEM") 
 
 CP17 <- test_data %>% 
-  filter(Metadata_condition == "CP17") 
-  #filter(Metadata_dose == 50) 
-  
+  filter(Metadata_condition == "CP17") %>%
+  filter(Metadata_dose == 50) 
+
+CP17 %>% summarise(n = n())  
+
 SP17 <- test_data %>% 
-  filter(Metadata_condition == "SP17") 
-  #filter(Metadata_dose == 50) 
+  filter(Metadata_condition == "SP17") %>%
+  filter(Metadata_dose == 50) 
   
 controls <- test_data %>% 
   filter(Metadata_condition == "control") 
@@ -226,25 +231,25 @@ summary_speed <- normalized %>%
   ungroup() %>%
   #filter(Metadata_id != "gn0055") %>%
   group_by(Metadata_matrix, Metadata_condition, Metadata_dose) %>%
-  summarise(mean_speed = mean(Track_Speed),std_speed = sd(Track_Speed))
+  summarise(mean_speed = mean(Track_Speed),std_speed = sd(Track_Speed), n = n())
   
 summary_speed %>% knitr::kable()
 ```
 
 ```{r}
-ggplot(data = normalized %>% filter(Metadata_condition == 'CP17', Metadata_matrix == "FN"), aes(x = factor(Track_Sector), y = Track_Speed)) +
+ggplot(data = normalized %>% filter(Metadata_condition == 'CP17', Metadata_matrix == "FN"), aes(x = factor(Metadata_dose), y = Track_xFMI)) +
   geom_boxplot() +
   ggtitle("CP17 (normalized)")
 
-ggplot(data = normalized %>% filter(Metadata_condition == 'control', Metadata_matrix == "FN"), aes(x = factor(Track_Sector), y = Track_Speed)) +
+ggplot(data = normalized %>% filter(Metadata_condition == 'control', Metadata_matrix == "FN"), aes(x = factor(Metadata_dose), y = Track_Speed)) +
   geom_boxplot( ) +
   ggtitle("Control (normalized)")
 
-ggplot(data = normalized %>% filter(Metadata_condition == 'SP17', Metadata_matrix == "FN"), aes(x = factor(Track_Sector), y = Track_Speed)) +
+ggplot(data = normalized %>% filter(Metadata_condition == 'SP17', Metadata_matrix == "FN"), aes(x = factor(Metadata_dose), y = Track_Speed)) +
   geom_boxplot() +
   ggtitle("SP17 (normalized)")
 
-ggplot(data = normalized %>% filter(Metadata_condition == 'vehicle', Metadata_matrix == "FN"), aes(x = factor(Track_Sector), y = Track_Speed)) +
+ggplot(data = normalized %>% filter(Metadata_condition == 'vehicle', Metadata_matrix == "FN"), aes(x = factor(Metadata_dose), y = Track_xFMI)) +
   geom_boxplot( ) +
   ggtitle("Vehicle (normalized)")
 ```
@@ -284,7 +289,7 @@ Summary:
 ```{r}
 sector_fraction_condition <- sector_fraction %>%
   ungroup() %>%
-  group_by(Metadata_matrix, Metadata_condition) %>%
+  group_by(Metadata_matrix, Metadata_condition, Metadata_dose) %>%
   summarise(mean_positive = mean(positive),
             sd_positive = sd(positive),
             mean_negative = mean(negative),
@@ -306,7 +311,7 @@ t.test(x$positive, y$positive)
 ```
 
 ```{r}
-ggplot(data = normalized %>% filter(Metadata_matrix == 'HEM'), aes(x = Metadata_condition, y = Track_Speed)) +
+ggplot(data = normalized %>% filter(Metadata_matrix == 'HEM'), aes(x = Metadata_dose, y = Track_Speed)) +
   geom_boxplot( ) +
   ggtitle("Migration in HEM (normalized)")
 ```
@@ -315,10 +320,10 @@ First question: does the vehicle and control group show a significant difference
 ttest_speed <- function(matrix, condition_x, condition_y){
   x <- normalized %>% 
     filter(Metadata_matrix == matrix) %>% 
-    filter(Metadata_condition == condition_x) 
+    filter(Metadata_condition == condition_x)
   
   y <- normalized %>% filter(Metadata_matrix == matrix) %>% 
-    filter(Metadata_condition == condition_y) 
+    filter(Metadata_condition == condition_y)
 
   return(t.test(x$Track_Speed,y$Track_Speed))
 }
@@ -326,13 +331,17 @@ ttest_speed <- function(matrix, condition_x, condition_y){
 ttest_directionality <- function(matrix, condition_x, condition_y){
   x <- normalized %>% 
     filter(Metadata_matrix == matrix) %>% 
-    filter(Metadata_condition == condition_x) 
+    filter(Metadata_condition == condition_x)
   
   y <- normalized %>% filter(Metadata_matrix == matrix) %>% 
-    filter(Metadata_condition == condition_y) 
+    filter(Metadata_condition == condition_y)
 
   return(t.test(x$Track_Directionality,y$Track_Directionality))
 }
+```
+
+```{r}
+ttest_speed("HEM","SP17","CP17")
 ```
 
 Using these function we can analyse the differences 
@@ -355,12 +364,14 @@ CP17 and SP17 differ but not significantly.
 x <- normalized %>% 
   filter(Metadata_matrix == "HEM") %>% 
   filter(Metadata_condition == "CP17") %>%
-  filter(Track_Sector == 2)
+  filter(Track_Sector == 2) %>%
+  filter(Metadata_dose == 50)
   
 y <- normalized %>% 
   filter(Metadata_matrix == "HEM") %>% 
   filter(Metadata_condition == "SP17") %>%
-  filter(Track_Sector == 2) 
+  filter(Track_Sector == 2)   %>%
+  filter(Metadata_dose == 50)
 
 x %>% ungroup() %>% summarise(n = n())
 y %>% ungroup() %>% summarise(n = n())
@@ -373,6 +384,7 @@ We see a difference in the Chemotactic Index
 t.test(x$Track_CI, y$Track_CI )
 t.test(x$Track_xFMI, y$Track_xFMI )  
 t.test(x$Track_Directionality, y$Track_Directionality )  
+t.test(x$Track_Speed, y$Track_Speed )  
 ```
 ```{r}
 normalized %>% 
@@ -380,4 +392,42 @@ normalized %>%
   filter(Metadata_condition == "vehicle") %>% 
   group_by_(.dots = strata) %>% slice(1) %>% 
   knitr::kable()
+```
+```{r}
+hem <- normalized %>% 
+  ungroup() %>% 
+  filter(Metadata_matrix == 'HEM')
+
+fn <- normalized %>% 
+  ungroup() %>% 
+  filter(Metadata_matrix == 'FN')
+
+feature <-  c("Track_Speed","Track_Speed_Y","Track_Speed_X","Track_xFMI","Track_yFMI","Track_Directionality","Track_Distance_Traveled","Track_CI")
+
+dif_fn <- DiffusionMap(fn, k = 50, vars = feature)
+
+scatter3d(x = dif_fn$DC1, y = dif_fn$DC2, z = dif_fn$DC3, point.col = "blue", surface = FALSE, grid = FALSE, groups = factor( dif_fn$Metadata_condition ))
+```
+
+
+
+```{r}
+ggplot(data = dif_fn, aes(x = DC1, y = DC3, color = factor(Metadata_condition))) +
+  geom_point() + 
+  labs(title = 'DM for migration in HEM')
+  
+
+ggplot(data = dif_fn, aes(x = DC1, y = DC3, color = factor(Metadata_id))) +
+  geom_point() + 
+  labs(title = 'DM for migration in HEM')
+
+```
+
+```{r}
+normalized %>% 
+  filter(Metadata_condition %in% c("vehicle")) %>%
+  summarise( n = n()) %>% 
+  filter(n < 40) %>% 
+  arrange(Metadata_id) %>% 
+  print
 ```

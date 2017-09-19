@@ -243,13 +243,13 @@ df1 <- df %>%
   print
 ```
 ## Track
-cytominer::track is used to create trajetories and compute migration parameters 
+neutrominer::track is used to create trajetories and compute migration parameters 
 ```{r}
 tracks <- df1 %>% 
   ungroup() %>%
   group_by_(.dots =  c(strata,track_label)) %>%
   arrange(Metadata_timePoint) %>%
-  cytominer::track(., c(strata,track_label)) %>%
+  neutrominer::track(., c(strata,track_label)) %>%
   group_by_(.dots = strata) %>% 
   print()
 

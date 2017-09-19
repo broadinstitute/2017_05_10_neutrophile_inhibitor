@@ -28,7 +28,7 @@ postprocessed <- read_csv(file.path(analysis_folder,csv_in)) %>%
 result_gyde <- left_join(
   
   quality <- postprocessed %>% 
-    cytominer::assess(.,min_path_length = 20),
+    neutrominer::assess(.,min_path_length = 20),
   
   postprocessed %>%
     filter(Track_Length > 20) %>%

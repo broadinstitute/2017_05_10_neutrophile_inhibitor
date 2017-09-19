@@ -64,8 +64,8 @@ normalized <-
     population = population,
     variables = feature_var,
     strata =  "Metadata_id",
-    sample = population %>% filter(Metadata_condition == "vehicle", Metadata_matrix == "FN"),
-    operation = "robustize"
+    sample = population %>% filter(Metadata_condition == "control"),
+    operation = "standardize"
   )
 
 normalized %<>% dplyr::collect() 
