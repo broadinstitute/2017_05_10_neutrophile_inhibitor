@@ -1,0 +1,87 @@
+---
+title: "2018_03_22_metadata"
+author: "TB"
+date: "3/22/2018"
+output: html_document
+---
+
+Preprocessing:
+* dowload preprocessed data (processed with matlab)
+* export data 
+
+```{in matlab}
+cd ~/repos/matlabMigrationAnalysis/
+setPathMigrationAnalysis  
+cd ~/Documents/2017_05_10_neutrophile_inhibitor/2018_migrationen_fmlp/
+expPath = pwd
+performBatchMigrationAnalysis(expPath)
+performBatchCSVExport(expPath, true)
+!mkdir  ../workspace/analysis/2018_fmlp
+!cp migrationData.csv  ../workspace/analysis/2018_fmlp/metadata.csv
+```
+
+Open metadata file and add 
+* Metadata_id
+* Metadata_condition
+* Metadata_chemokine
+* Metadata_date
+* Metadata_dose
+Rename path column to 
+* File_Path
+
+
+```{r cars}
+library("tidyverse")
+library("magrittr")
+```
+# define input folder
+```{r}
+data_folder <- "/Users/tbecker/Documents/2017_05_10_neutrophile_inhibitor/"
+csv_identifier <- "featureList.csv"
+metadata_file <- "metadata.csv"
+```
+
+# define output folder 
+```{r}
+analysis_folder <- '/Users/tbecker/Documents/2017_05_10_neutrophile_inhibitor/workspace/analysis/2018_fmlp'
+csv_single_cell_data <- 'TrackeddetectedNeutros.csv'
+
+metadata <- read_csv(file.path(analysis_folder, metadata_file)) %>%
+  select("File_Path",starts_with("Metadata")) %>%
+  print()
+
+experiment_list <- metadata %>%
+  extract2("File_Path") 
+
+strata <- c('Metadata_condition','Metadata_dose','Metadata_id','Metadata_date','Metadata_matrix','Metadata_chemokine')
+```
+# read all tracking results (single cell data)
+```{r}
+read_file <- function(path){
+  read_csv(file.path(data_folder, path,"results",csv_identifier))
+}
+
+df_list <- map(experiment_list, read_file)
+```
+# combine tracking data and metadata
+```{r}
+df_list2 <- list()
+for (i in 1:nrow(metadata)) {
+  df_list2[[i]] = cbind2(
+    metadata %>% slice(rep(i, each = nrow(df_list[[i]]))),
+    df_list[[i]]
+    )
+}
+```
+
+# write data 
+```{r}
+df <- do.call(rbind, df_list2) 
+write_csv(df, file.path(analysis_folder, csv_single_cell_data))
+```
+
+```{r}
+df %>% 
+  group_by(Metadata_condition, Metadata_id, Metadata_dose) %>%
+  summarise(n = n())
+```

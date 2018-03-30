@@ -1,0 +1,97 @@
+---
+title: "load_data"
+author: "TB"
+date: "07/07/2017"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("tidyverse")
+library("magrittr")
+```
+
+
+# Load data 
+Load tracking data created using MATLAB as normalized and not normalized data. 
+
+The normalization was performed using cytominer::normalize and the following variables 
+are normalized: 
+* "Track_Speed",
+* "Track_Speed_Y",
+* "Track_Speed_X",
+* "Track_xFMI",
+* "Track_yFMI",
+* "Track_Directionality",
+* "Track_Distance_Traveled", 
+* "Track_CI"
+
+
+```{r}
+csv_tracks <- 'clean_tracks.csv'
+csv_normalized <- 'clean_normalized.csv'
+
+analysis_folder <- '/Users/tbecker/Documents/2017_05_10_neutrophile_inhibitor/workspace/analysis/2018_ltb4'
+
+# grouping variable
+strata <- c('Metadata_condition','Metadata_dose','Metadata_id',
+            'Metadata_date','Metadata_matrix','Metadata_chemokine')
+
+
+```
+
+# load data 
+We load the data and
+* update the Metadata for one experiment
+* remove short trajectories 
+```{r} 
+population <- read_csv(file.path(analysis_folder, csv_tracks)) %>%
+  mutate(Metadata_condition = replace(Metadata_condition, Metadata_condition == "water", "vehicle")) %>%
+  filter(Track_Length > 19)
+
+population %>% select(Track_Speed) %>% print
+```
+
+We define the variables for normalization and use cytominer::normalize
+```{r}
+feature_var = c("Track_Speed","Track_Speed_Y","Track_Speed_X","Track_xFMI","Track_yFMI","Track_Directionality","Track_Distance_Traveled","Track_CI")
+
+# optionally we can run 
+#population <- cytominer::generalized_log(population, variables = feature_var)
+
+normalized <-
+  cytominer::normalize(
+    population = population,
+    variables = feature_var,
+    strata =  "Metadata_id",
+    sample = population %>% filter(Metadata_condition == "vehicle"),
+    operation = "standardize"
+  )
+
+normalized %<>% dplyr::collect() 
+
+normalized %>% select(Track_Speed) %>% print
+
+```
+
+## Save normalized data.
+```{r}
+write_csv(normalized, file.path(analysis_folder, csv_normalized))
+```
+
+```{r}
+results <- normalized %>% 
+  group_by(Metadata_dose, Metadata_condition) %>% 
+  summarise(
+    mean_speed = mean(Track_Speed),
+    mean_directionality  = mean(Track_Directionality),
+    mean_xfmi = mean(Track_xFMI)
+    ) %>% print
+
+
+
+
+
+```

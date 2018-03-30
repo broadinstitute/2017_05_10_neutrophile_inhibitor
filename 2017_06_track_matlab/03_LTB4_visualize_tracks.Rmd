@@ -1,0 +1,119 @@
+---
+title: "Prepae metadata file for asthma data"
+author: "TB"
+date: "7/28/2017"
+output: html_document
+---
+```{r}
+library("tidyverse")
+library("stringr")
+library("readr")
+library("plotly")
+library("ggplot2")
+library("neutrominer")
+library("magrittr")
+```
+
+
+# Load data 
+The output of CellProfiler track module is loaded as CSV, tracked using cytominer::track and 
+stored in the data folder as "track.csv". 
+```{r}
+csv_in <- 'TrackeddetectedNeutros.csv'
+csv_out <- 'clean_tracks.csv'
+analysis_folder <- '/Users/tbecker/Documents/2017_05_10_neutrophile_inhibitor/workspace/analysis/2018_ltb4'
+
+strata <- c('Metadata_condition',
+            'Metadata_dose',
+            'Metadata_id',
+            'Metadata_date',
+            'Metadata_matrix',
+            'Metadata_chemokine')
+    
+# scale speed from pixel/frame to µm/minute
+pixel_size = 0.7819
+# frames are recorded each 30 seconds, i.e. 
+speed_scale <- pixel_size * 2
+
+# the velocity can be transformed from pixel/frame to µm/minute by multiplying by the factor speed_scale
+df <- read_csv(file.path(analysis_folder, csv_in)) %>% 
+  dplyr::mutate(Metadata_frame = as.double(Metadata_timePoint)) 
+# df %<>% dplyr::mutate(Metadata_frame = as.double(Metadata_timePoint)) 
+
+#The data contains tracking data for neutrophils from different conditions. The datasets 
+#can be ditinguished using the Metadata columns defined in strata. 
+track_label = c('TrackObjects_Label')
+
+```
+
+
+```{r}
+tracks <- df %>%
+  group_by(TrackObjects_Label) %>%
+  track(., c("TrackObjects_Label"))
+
+tracks %>% assess(., min_path_length = 20)
+```
+select experiment with highest velocity
+#AB0020	sp17	50	1660.037963
+```{r}
+tracking_data <- df %>%
+  filter(Metadata_condition == 'sp17', Metadata_id == 'AB0020', Metadata_dose == 50)
+  
+df %>% select(Metadata_condition, Metadata_id, Metadata_dose) %>%
+  group_by( Metadata_id, Metadata_dose) %>%
+  slice(1) %>%
+  print
+  
+
+```
+
+2D plot
+```{r}
+ggplot(
+  data = tracking_data
+  ) + 
+  aes( 
+    x = Location_Center_Y, 
+    y = Location_Center_X, 
+    group = TrackObjects_Label) +
+  geom_path() +
+  geom_point() + 
+  coord_fixed() +
+  theme_void() +
+  theme(panel.border = element_rect(size = 1, colour = "grey30", fill = NA ) ) 
+```
+
+Before plotting, we rename x, y and time axis 
+```{r}
+df <- tracking_data %>% 
+    select(Location_Center_Y, Location_Center_X,TrackObjects_Label, Metadata_timePoint ) %>%
+  rename(Zeit = Metadata_timePoint ) %>%
+  rename(Standpunkt_X = Location_Center_X) %>% 
+  rename(Standpunkt_Y = Location_Center_Y) %>%
+  mutate(Zeit = Zeit )
+
+df %>%  print
+
+```
+
+We use "layout" to change the fonts defined in font_layout
+```{r}
+font_layout <- list(
+  family = "sans serif",
+  size = 16,
+  color = 'blue')
+
+plot_ly(df, 
+  x = ~Standpunkt_X, 
+  y = ~Standpunkt_Y, 
+  z = ~Zeit,  
+  split = ~TrackObjects_Label, 
+  type = 'scatter3d', 
+  mode = 'lines', 
+  opacity = 1,
+  line = list(width = 2, reverscale = FALSE)
+  ) %>% 
+    layout(font=font_layout)
+```
+

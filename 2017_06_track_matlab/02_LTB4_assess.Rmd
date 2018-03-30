@@ -16,19 +16,32 @@ stored in the data folder as "track.csv".
 ```{r}
 csv_in <- 'clean_tracks.csv'
 csv_out <- 'assessed.csv'
-analysis_folder <- '../../../analysis/2017_04_28_matlab/'
-strata <- c('Metadata_condition','Metadata_dose','Metadata_id','Metadata_date','Metadata_matrix')
+analysis_folder <- '/Users/tbecker/Documents/2017_05_10_neutrophile_inhibitor/workspace/analysis/2018_ltb4'
+#
+strata <- c('Metadata_condition','Metadata_dose','Metadata_id',
+            'Metadata_date','Metadata_matrix','Metadata_chemokine')
 
 postprocessed <- read_csv(file.path(analysis_folder,csv_in)) %>% 
   group_by_(.dots = strata)
+```
+
+```{r}
+assess <- function(tracks, min_path_length = 19, strata) {
+  track_info <- list(migrationminer::valid_observation_time(tracks, min_path_length),
+    migrationminer::validate_tracks(tracks, min_path_length))
+
+  return(Reduce(function(...) merge(..., all = TRUE, by_ = strata), track_info))
+}
+
+
+quality <- migrationminer::assess(postprocessed, min_path_length = 20)
 ```
 
 ## Assess quality
 ```{r}
 result_gyde <- left_join(
   
-  quality <- postprocessed %>% 
-    neutrominer::assess(.,min_path_length = 20),
+  quality <- migrationminer::assess(postprocessed,min_path_length = 20),
   
   postprocessed %>%
     filter(Track_Length > 20) %>%
@@ -37,34 +50,12 @@ result_gyde <- left_join(
       tracks_in_negative_sector = sum(Track_Negative_Sector),
       tracks_in_neutral_up_sector = sum(Track_Neutral_Sector_Up),
       tracks_in_neutral_down_sector = sum(Track_Neutral_Sector_Down)),
-  by_ = strata) %>%
+  by = strata) %>%
   select(-sum_track) 
 
-#write_csv(result_gyde, file.path(analysis_folder, csv_out))
 
 result_gyde %>% print
 
-
-```
-Anonymize data 
-```{r}
-ano_id <- read.csv('../../../analysis/2017_04_28_matlab/experiment_id.csv') %>% 
-  mutate(Metadata_id = str_to_lower(Metadata_id)) %>% 
-  print
-
-anon_data <- left_join(
-  ano_id, 
-  result_gyde %>% filter(Metadata_dose != 0.5),
-  by = 'Metadata_id'
-) %>%
-  filter(Metadata_id != "bd0055") %>% 
-  filter(Metadata_id != "gn0017") %>%
-  filter(Metadata_condition != "control") %>% 
-  print
-
-anon_data %>% 
-  group_by(Experiment_id) %>% 
-  summarise(n = n())
 
 ```
 
@@ -77,9 +68,7 @@ sem <- function(vector){
 }
 
 q1 <- quality %>% 
-  filter(Metadata_id != "bd0055") %>% 
-  filter(Metadata_id != "gn0017") %>%
-  filter( Metadata_dose != 0.5) %>%
+
   ungroup() %>%
   group_by(Metadata_matrix, Metadata_condition, Metadata_dose) %>%
   summarise(
@@ -87,6 +76,5 @@ q1 <- quality %>%
     VOT = mean(VOT)
   ) %>% print
 
-write_csv(q1,"/Users/tbecker/Desktop/quality.csv")
 ```
 

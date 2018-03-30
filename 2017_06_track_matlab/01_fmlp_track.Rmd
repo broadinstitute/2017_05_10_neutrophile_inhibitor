@@ -1,0 +1,87 @@
+---
+title: "load_data"
+author: "TB"
+date: "5/15/2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("readr")
+library("tibble")
+library("dplyr")
+library("tidyr")
+library("stringr")
+library("purrr")
+library("magrittr")
+library("knitr")
+```
+
+# Load data 
+The output of CellProfiler track module is loaded as CSV, tracked using cytominer::track and 
+stored in the data folder as "track.csv". 
+```{r}
+csv_in <- 'TrackeddetectedNeutros.csv'
+csv_out <- 'clean_tracks.csv'
+analysis_folder <- '/Users/tbecker/Documents/2017_05_10_neutrophile_inhibitor/workspace/analysis/2018_fmlp'
+
+strata <- c('Metadata_condition',
+            'Metadata_dose',
+            'Metadata_id',
+            'Metadata_date',
+            'Metadata_matrix',
+            'Metadata_chemokine')
+    
+# scale speed from pixel/frame to µm/minute
+pixel_size = 0.7819
+# frames are recorded each 30 seconds, i.e. 
+speed_scale <- pixel_size * 2
+
+# the velocity can be transformed from pixel/frame to µm/minute by multiplying by the factor speed_scale
+df <- read_csv(file.path(analysis_folder, csv_in)) %>% 
+  dplyr::mutate(Metadata_frame = as.double(Metadata_timePoint)) 
+# df %<>% dplyr::mutate(Metadata_frame = as.double(Metadata_timePoint)) 
+
+#The data contains tracking data for neutrophils from different conditions. The datasets 
+#can be ditinguished using the Metadata columns defined in strata. 
+track_label = c('TrackObjects_Label')
+
+
+
+```
+
+## Track
+neutrominer::track is used to create trajetories and compute migration parameters 
+```{r}
+tracks <- df %>% 
+  ungroup() %>%
+  group_by_(.dots =  c(strata,track_label)) %>%
+  arrange(Metadata_timePoint) %>%
+  migrationminer::track(., c(strata,track_label)) %>%
+  group_by_(.dots = strata) %>% 
+  print()
+
+tracks %>% extract2("Track_Angle") %>% hist
+
+tracks %>% slice(1)
+
+```
+
+## PostProcessing 
+
+Calculate speed in µm/minute
+```{r}
+postprocessed <- tracks %>%
+  mutate(Track_Speed = Track_Speed * speed_scale) %>%
+  mutate(Track_Speed_max = Track_Speed_max * speed_scale) %>%
+  mutate(Track_Speed_X = Track_Speed_X * speed_scale) %>%
+  mutate(Track_Speed_Y = Track_Speed_Y * speed_scale) %>%
+  mutate(Track_Distance_Traveled = pixel_size * Track_Distance_Traveled) %>%
+  mutate(Track_Integrated_Distance_Traveled = pixel_size * Track_Integrated_Distance_Traveled) 
+```
+
+All na values are set to 'None' and all tracks are stored 
+```{r}
+postprocessed$Metadata_dose[is.na(postprocessed$Metadata_dose)] <- 'None'
+write_csv(postprocessed, file.path(analysis_folder, csv_out))
+```

@@ -115,3 +115,34 @@ ggplot(data = dif_fn, aes(x = DC1, y = DC2, color = factor(Metadata_id))) +
 
 
 ```
+```{r}
+profiles <- cytominer::aggregate(population = normalized, variables = feature, strata = strata)
+
+dif_profile <- DiffusionMap(profiles, k = 50, vars = feature)
+
+# 3D Plot
+
+scatter3d(x = dif_profile$DC1, y = dif_profile$DC2, z = dif_profile$DC3, point.col = "blue", surface=FALSE, grid = FALSE, groups = factor( dif_hem$Metadata_condition ))
+```
+2D Plot
+
+```{r}
+ggplot(data = dif_profile, aes(x = DC1, y = DC3, color = factor(Metadata_condition))) +
+  geom_point() + 
+  labs(title = 'DM for migration in HEM')
+  
+
+ggplot(data = dif_profile, aes(x = DC1, y = DC3, color = factor(Metadata_id))) +
+  geom_point() + 
+  labs(title = 'DM for migration in HEM')
+
+ggplot(data = dif_profile, aes(x = DC1, y = DC2, color = factor(Metadata_condition))) +
+  geom_point() + 
+  labs(title = 'DM for migration in HEM')
+
+ggplot(data = dif_profile, aes(x = DC1, y = DC2, color = factor(Metadata_id))) +
+  geom_point() + 
+  labs(title = 'DM for migration in HEM')
+
+
+```

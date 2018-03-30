@@ -30,8 +30,8 @@ library("Rtsne")
 # Load data 
 The output of the MATLAB tracking is stored in "track.csv", see create_metadata.Rmd
 ```{r}
-csv_in <- 'normalized.csv'
-data_dir <- '../../analysis/2017_04_28_matlab/'
+csv_in <- 'clean_normalized.csv'
+data_dir <- '../../../analysis/2017_04_28_matlab/'
 strata <- c('Metadata_condition','Metadata_dose','Metadata_id','Metadata_date','Metadata_matrix')
 
 normalized <- read_csv(file.path(data_dir, csv_in)) %>%
@@ -136,7 +136,7 @@ for (i in 1:8){
   df = cbind(as.data.frame(Y),
              as.data.frame(HEM))
 
-  print(ggplot(data = df, aes(x = V1, y = V2, color = factor(Metadata_id), shape = Metadata_condition)) +
+  print(ggplot(data = df, aes(x = V1, y = V2, color = factor(Metadata_condition), shape = Metadata_id)) +
       geom_point() +
       xlab("") + 
       ylab("") +

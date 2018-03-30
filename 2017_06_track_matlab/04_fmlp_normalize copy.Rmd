@@ -1,0 +1,150 @@
+---
+title: "load_data"
+author: "TB"
+date: "07/07/2017"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("tidyverse")
+library("magrittr")
+```
+
+
+# Load data 
+Load tracking data created using MATLAB as normalized and not normalized data. 
+
+The normalization was performed using cytominer::normalize and the following variables 
+are normalized: 
+* "Track_Speed",
+* "Track_Speed_Y",
+* "Track_Speed_X",
+* "Track_xFMI",
+* "Track_yFMI",
+* "Track_Directionality",
+* "Track_Distance_Traveled", 
+* "Track_CI"
+
+
+```{r}
+csv_tracks <- 'clean_tracks.csv'
+csv_normalized <- 'clean_normalized.csv'
+
+analysis_folder <- '/Users/tbecker/Documents/2017_05_10_neutrophile_inhibitor/workspace/analysis/2018_fmlp'
+
+# grouping variable
+strata <- c('Metadata_condition','Metadata_dose','Metadata_id',
+            'Metadata_date','Metadata_matrix','Metadata_chemokine')
+
+
+```
+
+# load data 
+We load the data and
+* update the Metadata for one experiment
+* remove short trajectories 
+```{r} 
+population <- read_csv(file.path(analysis_folder, csv_tracks)) %>%
+  mutate(Metadata_condition = replace(Metadata_condition, Metadata_condition == "water", "vehicle")) %>%
+  filter(Track_Length > 19) %>%
+  mutate(Metadata_dose = ifelse(is.na(Metadata_dose), "none", Metadata_dose))
+
+population %>% select(Track_Speed) %>% print
+```
+
+We define the variables for normalization and use cytominer::normalize
+```{r}
+feature_var = c("Track_Speed","Track_Speed_Y","Track_Speed_X","Track_xFMI","Track_yFMI","Track_Directionality","Track_Distance_Traveled","Track_CI")
+
+# optionally we can run 
+#population <- cytominer::generalized_log(population, variables = feature_var)
+
+normalized <-
+  cytominer::normalize(
+    population = population,
+    variables = feature_var,
+    strata =  "Metadata_id",
+    sample = population %>% filter(Metadata_condition == "vehicle"),
+    operation = "standardize"
+  )
+
+normalized %<>% dplyr::collect() 
+
+normalized %>% select(Track_Speed) %>% print
+
+```
+
+## Save normalized data.
+```{r}
+write_csv(normalized, file.path(analysis_folder, csv_normalized))
+```
+
+```{r}
+sem <- function(x){
+  print(x)
+  sem <- 
+    print(sem)
+  return(sem)
+
+}
+
+results <- normalized %>% 
+  group_by(Metadata_dose, Metadata_condition) %>% 
+  summarise(
+    n = n(),
+    mean_speed = mean(Track_Speed),
+    sem_speed = sd(Track_Speed) / sqrt(n()),
+    sd_speed = sd(Track_Speed),
+    mean_directionality  = mean(Track_Directionality),
+#    sem_directionality = sd(Track_Directionality) / sqrt(Track_Directionality),
+    sd_directionality = sd(Track_Directionality),
+    mean_xfmi = mean(Track_xFMI),
+#    sem_xfmi = sd(Track_xFMI) / sqrt(Track_xFMI),
+    sd_xfmi = sd(Track_xFMI)
+    ) %>% print
+
+write_csv(results, file.path(analysis_folder,'results.csv'))
+
+```
+```{r}
+# to change number of lines see 
+# https://stackoverflow.com/questions/24845652/specifying-the-scale-for-the-density-in-ggplot2s-stat-density2d
+ggplot( data = population %>% filter(Metadata_dose != 50)) +  
+  aes(x = Track_Speed, y = Track_Directionality, color = Metadata_condition) + 
+  geom_point() + 
+  facet_wrap( ~ Metadata_id)
+
+normalized %>% 
+  group_by(Metadata_condition, Metadata_id) %>%
+  summarise(mean_speed = median(Track_Speed) ) %>%
+  print
+  
+```
+```{r}
+results_per_id <- normalized %>% 
+  group_by(Metadata_id, Metadata_condition, Metadata_dose) %>% 
+  summarise(
+    n = n(),
+    mean_speed = mean(Track_Speed),
+    sem_speed = sd(Track_Speed) / sqrt(n()),
+    sd_speed = sd(Track_Speed),
+    mean_directionality  = mean(Track_Directionality),
+    sem_directionality = sd(Track_Directionality) / sqrt(n()),
+    sd_directionality = sd(Track_Directionality),
+    mean_xfmi = mean(Track_xFMI),
+    sem_xfmi = sd(Track_xFMI) / sqrt(n()),
+    sd_xfmi = sd(Track_xFMI)
+    ) %>% print
+
+```
+
+
+```{r}
+ggplot(data = results_per_id) + 
+  aes(x = mean_speed, y = mean_xfmi, color = Metadata_dose, shape = as.factor(Metadata_id) ) + 
+  geom_point()
+```
+

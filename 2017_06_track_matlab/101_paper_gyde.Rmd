@@ -1,0 +1,321 @@
+---
+title: "Data analysis published in 'CP17 in neutrophile migration'"
+author: "Tim Becker"
+date: "8/30/2017"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("tidyverse")
+source("../windrose.r")
+library("magrittr")
+```
+
+# Input data 
+* The tracking data is stored in the file clean_tracks.csv.
+* The normalized data is stored in the file clean_normalized.csv. Normalization can be found in 04_normalize.Rmd
+
+```{r}
+csv_tracks <- 'clean_tracks.csv'
+csv_normalized <- 'clean_normalized.csv'
+analysis_folder <- '../../../analysis/2017_04_28_matlab/'
+```
+
+
+Definition of the grouping variables. 
+```{r}
+strata <- c('Metadata_condition','Metadata_dose','Metadata_id','Metadata_date','Metadata_matrix')
+
+
+```
+
+Tracking and normalized data is loaded as a data frame, sorted and ordered 
+```{r}
+tracks <- read_csv(file.path(analysis_folder, csv_tracks)) %>%
+  select(Metadata_id,Metadata_matrix, Metadata_condition, Metadata_dose, everything() ) %>%
+  arrange(Metadata_id, Metadata_matrix, Metadata_condition, Metadata_dose) %>%
+  group_by_(.dots = strata) %>%
+  filter(Track_Length > 19)
+
+normalized <- read_csv(file.path(analysis_folder, csv_normalized)) %>%
+  select(Metadata_id,Metadata_matrix, Metadata_condition, Metadata_dose, everything() ) %>%
+  arrange(Metadata_id, Metadata_matrix, Metadata_condition, Metadata_dose) %>%
+  group_by_(.dots = strata)  %>%
+  filter(Track_Length > 19)
+
+```
+
+```{r}
+group_cp17 <- tracks %>% 
+  filter(Metadata_condition == "CP17") %>%
+  ungroup() %>% 
+  group_by(Metadata_id) %>% 
+  slice(1) %>%
+  extract2("Metadata_id") %>% 
+  print
+
+group_sp17 <- tracks %>% 
+  filter(Metadata_condition == "SP17") %>%
+  ungroup() %>% 
+  group_by(Metadata_id) %>% 
+  slice(1) %>%
+  extract2("Metadata_id") %>% 
+  print
+
+```
+
+
+```{r}
+tracks %>% ungroup %>% filter(Metadata_matrix == "FN") %>% filter(Metadata_condition == "vehicle") %>% summarise(mean_displacement = mean(Track_Distance_Traveled))
+
+normalized %>% 
+  filter(Metadata_matrix == "FN") %>% 
+  mutate(Slow = Track_Distance_Traveled < 0.2) %>% 
+  ungroup() %>% 
+  group_by(Metadata_condition) %>% 
+  summarise(n_slow = sum(Slow), fraction = sum(Slow) / n()) 
+
+```
+
+```{r}
+normalized %>% filter(Metadata_condition == "vehicle", Metadata_matrix == "FN") %>% ggplot(data = ., aes(x=Track_xFMI)) +
+  geom_histogram(bins = 50)
+
+```
+
+ Next we rotate the angle by 90 degrees and transform the speed from µm/min to µm/sec
+```{r}
+ population <- tracks %>% 
+  filter(Track_Length > 19) %>%
+  mutate(Track_Angle = Track_Angle + pi/2) %>% # rotate all angles by 90 degree or pi/2
+  mutate(Track_Angle = ifelse(Track_Angle > pi, Track_Angle - 2*pi, Track_Angle) ) %>%
+  mutate(Track_Angle = ifelse(Track_Angle < 0, Track_Angle + 2*pi, Track_Angle) ) %>%
+  mutate(Track_Speed = Track_Speed / 60)
+``` 
+
+Show all groups that are analyzed 
+
+```{r}
+normalized %>% 
+  ungroup() %>%
+  group_by_(.dots = strata) %>%
+  slice(1) %>%
+  group_by_(.dots =  c('Metadata_matrix','Metadata_condition','Metadata_dose','Metadata_id')) %>% 
+  summarise( n = n()) %>%
+  knitr::kable(
+)
+```
+
+Angle distribution of trajectories for all migration run in HEM. 
+
+```{r}
+test_data <- population %>%
+  filter(Metadata_matrix == "HEM") %>%
+  filter(Metadata_id != "bd0055")
+
+CP17 <- test_data %>% 
+  filter(Metadata_condition == "CP17") %>%
+  filter(Metadata_dose == 5) 
+  
+SP17 <- test_data %>% 
+  filter(Metadata_condition == "SP17") %>%
+  filter(Metadata_dose == 5) 
+  
+controls <- test_data %>% 
+  filter(Metadata_condition == "control") 
+
+vehicle <- test_data %>% 
+  filter(Metadata_condition == "vehicle") 
+
+spdmin <- 0
+spdmax <- 0.3
+spdres <- 0.02
+dirres <- 90
+
+h1 <- plot.windrose(spd = CP17$Track_Speed, dir = (180 * (CP17$Track_Angle) / pi), 
+  spdmin = spdmin, spdmax = spdmax, spdres = spdres, dirres = dirres, title_name = "Angle distribution for migration  in FN (CP17, 50µm)")
+
+h2 <- plot.windrose(spd = SP17$Track_Speed, dir = (180 * (SP17$Track_Angle) / pi), 
+  spdmin = spdmin, spdmax = spdmax, spdres = spdres, dirres = dirres, title_name = "Angle distribution for migration  in FN (SP17, 50µm)")
+
+h3 <- plot.windrose(spd = controls$Track_Speed, dir = (180 * (controls$Track_Angle) / pi),
+  spdmin = spdmin, spdmax = spdmax, spdres = spdres, dirres = dirres, title_name = "Angle distribution for migration in FN (control)")
+
+h4 <- plot.windrose(spd = vehicle$Track_Speed, dir = (180 * (vehicle$Track_Angle) / pi), 
+  spdmin = spdmin, spdmax = spdmax, spdres = spdres, dirres = dirres,  title_name = "Angle distribution for migration in FN (vehicle) ")
+```
+
+Angle distribution of trajectories for all migration run in HEM. 
+
+```{r}
+test_data <- population %>%
+  filter(Metadata_matrix == "HEM") 
+
+CP17 <- test_data %>% 
+  filter(Metadata_condition == "CP17") %>%
+  filter(Metadata_dose == 5) 
+  
+SP17 <- test_data %>% 
+  filter(Metadata_condition == "SP17") %>%
+  filter(Metadata_dose == 5) 
+  
+controls <- test_data %>% 
+  filter(Metadata_condition == "control") 
+
+vehicle <- test_data %>% 
+  filter(Metadata_condition == "vehicle") 
+
+spdmin <- 0
+spdmax <- 0.3
+spdres <- 0.02
+dirres <- 10
+
+h1 <- plot.windrose(spd = CP17$Track_Speed, dir = (180 * (CP17$Track_Angle) / pi), 
+  spdmin = spdmin, spdmax = spdmax, spdres = spdres, dirres = dirres, title_name = "Angle distribution for migration  in FN (CP17, 50µm)")
+
+h2 <- plot.windrose(spd = SP17$Track_Speed, dir = (180 * (SP17$Track_Angle) / pi), 
+  spdmin = spdmin, spdmax = spdmax, spdres = spdres, dirres = dirres, title_name = "Angle distribution for migration  in FN (SP17, 50µm)")
+
+h3 <- plot.windrose(spd = controls$Track_Speed, dir = (180 * (controls$Track_Angle) / pi),
+  spdmin = spdmin, spdmax = spdmax, spdres = spdres, dirres = dirres, title_name = "Angle distribution for migration in FN (control)")
+
+h4 <- plot.windrose(spd = vehicle$Track_Speed, dir = (180 * (vehicle$Track_Angle) / pi), 
+  spdmin = spdmin, spdmax = spdmax, spdres = spdres, dirres = dirres,  title_name = "Angle distribution for migration in FN (vehicle) ")
+```
+How does the speed differ for migrations run in FN or HEM? We compare the speed of all experiments with an induced chemotaxis (vehicle).
+```{r}
+ggplot(data = population %>% filter(Metadata_condition == "vehicle"), aes(x = Metadata_matrix, y = Track_Speed)) + 
+  geom_boxplot() +
+  ggtitle("Speed of neutrophils migrating (vehicle)")
+```
+The distibutions differ significantly
+```{r}
+t.test( population %>% filter(Metadata_condition == "vehicle", Metadata_matrix == "FN") %>% extract2("Track_Speed"), 
+        population %>% filter(Metadata_condition == "vehicle", Metadata_matrix == "HEM") %>% extract2("Track_Speed"))
+
+```
+```{r}
+ggplot(data = population %>% filter(Metadata_matrix == "FN", Metadata_condition == "CP17") , aes(y = Track_xFMI, x = Metadata_dose)) +
+    geom_boxplot()
+
+ggplot(data = population %>% filter(Metadata_matrix == "FN", Metadata_condition == "SP17") , aes(y = Track_xFMI, x = Metadata_dose)) +
+    geom_boxplot()
+
+ggplot(data = population %>% filter(Metadata_matrix == "FN"), aes(y = Track_xFMI, x = Metadata_condition)) +
+    geom_boxplot()
+
+population %>%
+  ungroup() %>%
+  filter(Metadata_matrix == "HEM") %>%
+  group_by(Metadata_matrix, Metadata_condition, Metadata_dose) %>% 
+  summarise(mean_fmix = mean(Track_Speed)
+  )
+```
+```{r}
+ggplot(data=population %>% filter(Metadata_matrix == "FN"), aes(x=Track_xFMI, y = Track_Integrated_Distance_Traveled, color = Metadata_dose)) +
+geom_point()
+
+```
+
+
+```{r}
+ggplot(data = population %>% filter(Metadata_matrix == "FN"), aes(x=Track_xFMI)) + 
+  geom_histogram()
+```
+```{r}
+df <- population %>% 
+  ungroup() %>% 
+  filter( Metadata_condition %in% c("vehicle","control")) %>%
+  group_by_(.dots = c("Metadata_id", "Metadata_condition")) %>%
+  summarise_all("mean") %>%
+  print
+```
+```{r}
+df %>% ggplot(aes(x = Track_Speed, Track_xFMI, color = Metadata_condition)) +
+  geom_point()
+```
+
+```{r}
+population %>% 
+  ungroup() %>%
+  filter(Metadata_condition == "vehicle") %>%
+  group_by(Metadata_id) %>%
+  summarise(n = n())
+
+population %>% 
+  filter(Metadata_matrix == "FN", Metadata_id == "bd0054") %>%
+  summarise(mean_xfmi = mean(Track_xFMI))
+```
+
+
+```{r}
+feature_tsne = c("Track_Speed", "Track_Speed_Y", "Track_Speed_X", "Track_xFMI", "Track_yFMI",
+                 "Track_Directionality", "Track_Distance_Traveled","Track_Integrated_Distance_Traveled", "Track_CI", "Track_Angle")
+
+df <- normalized %>% 
+  ungroup() %>%
+  filter(Metadata_condition != "vehicle") %>%
+  #filter(Metadata_condition != "control") %>%
+  select_(.dots = c(feature_tsne,strata,"Track_Sector")) %>%
+  group_by_(.dots = c("Metadata_matrix","Metadata_condition","Metadata_dose","Metadata_id")) %>%
+  #group_by("Metadata_matrix) %>%
+  #summarise(mean_speed = mean(Track_Speed)) %>% 
+  summarise_all(c("mean","sd") %>%
+  print
+  
+
+calculate_tsnes <- function(perplexity,data) {
+  return(Rtsne(data, perplexity = perplexity, verbose = TRUE, max_iter = 500, theta = 0.5, pca_scale = TRUE))
+}
+
+perplexities <- c(16)
+
+set.seed(42)
+HEM <- df 
+HEM_train <- HEM %>% ungroup() %>% select_(.dots = feature_tsne)
+tsnes_hem <- lapply(perplexities, calculate_tsnes, data = HEM_train)
+
+FN <- df %>% filter(Metadata_matrix == "FN")
+FN_train <- FN %>% ungroup() %>% select_(.dots = feature_tsne)
+tsnes_fn <- lapply(perplexities, calculate_tsnes, data = FN_train)
+
+```
+
+
+
+```{r}
+
+ 
+for (i in 1){
+  Y <- as.data.frame(tsnes_hem[[i]]$Y)
+
+  df = cbind(as.data.frame(Y),
+             as.data.frame(df))
+
+  print(ggplot(data = df, aes(x = V1, y = V2, color = Metadata_matrix, size = 10, shape = factor(Metadata_dose))) +
+      geom_point() +
+      xlab("") + 
+      ylab("") +
+      ggtitle("t-SNE") +
+      guides(colour = guide_legend(override.aes = list(size = 6))) +
+      theme_light(base_size = 20) +
+      theme(axis.text.x = element_blank(),
+            axis.text.y = element_blank()) + 
+      labs(title = sprintf('Migration in FN,  perplexity %f', tsnes_fn[[i]]$perplexity )))
+}
+```
+
+```{r}
+df_pca <- normalized %>% 
+  ungroup() %>%
+  select(feature_tsne)
+
+pca <- prcomp(df_pca)
+
+plot(pca)
+```
+
+```

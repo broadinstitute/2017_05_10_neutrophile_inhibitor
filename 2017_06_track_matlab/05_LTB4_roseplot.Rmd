@@ -1,0 +1,93 @@
+---
+title: "load_data"
+author: "TB"
+date: "5/15/2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("tidyverse")
+source("../windrose.r")
+library("tidyverse")
+library("stringr")
+library("readr")
+library("plotly")
+library("ggplot2")
+library("neutrominer")
+library("magrittr")
+```
+
+# Load data 
+The output of CellProfiler track module is loaded as CSV, tracked using cytominer::track and 
+stored in the data folder as "track.csv". 
+```{r}
+csv_in <- 'clean_tracks.csv'
+analysis_folder <- '/Users/tbecker/Documents/2017_05_10_neutrophile_inhibitor/workspace/analysis/2018_ltb4'
+
+# grouping variable
+strata <- c('Metadata_condition','Metadata_dose','Metadata_id',
+            'Metadata_date','Metadata_matrix','Metadata_chemokine')
+
+# read data
+tracks <- read_csv(file.path(analysis_folder,csv_in)) %>% 
+  group_by_(.dots = strata)
+```
+
+```{r}
+
+population <- tracks %>%
+  filter(Track_Length > 9) %>%
+  mutate(Track_Angle = Track_Angle + pi/2) %>% # rotate all angles by 90 degree or pi/2
+  mutate(Track_Angle = ifelse(Track_Angle > pi, Track_Angle - 2*pi, Track_Angle) ) %>%
+  mutate(Track_Angle = ifelse(Track_Angle < 0, Track_Angle + 2*pi, Track_Angle) ) 
+
+
+spdmin <- 0
+spdmax <- 6
+spdres <- 1
+dirres <- 90
+
+
+CP17_5 <- population %>% 
+  filter(Metadata_condition == 'cp17') %>%
+  filter(Metadata_dose == 5) %>%
+  filter(Metadata_id == "AB0014")
+
+h1 <- plot.windrose(spd = CP17_5$Track_Speed, dir = (180 * (CP17_5$Track_Angle ) / pi), 
+  spdmin = spdmin, spdmax = spdmax, spdres = spdres, dirres = dirres,  title_name = "Migration distribution CP17_5")
+
+CP17_50 <- population %>% 
+  filter(Metadata_condition == 'cp17') %>%
+  filter(Metadata_dose == 50)
+
+h2 <- plot.windrose(spd = CP17_50$Track_Speed, dir = (180 * (CP17_50$Track_Angle) / pi), 
+  spdmin = spdmin, spdmax = spdmax, spdres = spdres, dirres = dirres,  title_name = "Migration distribution CP17_50")
+
+SP17_5 <- population %>% 
+  filter(Metadata_condition == 'sp17') %>%
+  filter(Metadata_dose == 5)
+
+h3 <- plot.windrose(spd = SP17_5$Track_Speed, dir = (180 * (SP17_5$Track_Angle) / pi), 
+  spdmin = spdmin, spdmax = spdmax, spdres = spdres, dirres = dirres,  title_name = "Migration distribution SP17_5")
+
+SP17_50 <- population %>% 
+  filter(Metadata_condition == 'sp17') %>%
+  filter(Metadata_dose == 50)
+
+h4 <- plot.windrose(spd = SP17_50$Track_Speed, dir = (180 * (SP17_50$Track_Angle) / pi), 
+  spdmin = spdmin, spdmax = spdmax, spdres = spdres, dirres = dirres,  title_name = "Migration distribution SP17_50")
+
+
+vehicle <- population %>% 
+  filter(Metadata_condition == 'vehicle')
+
+h5 <- plot.windrose(spd = vehicle$Track_Speed, dir = (180 * (vehicle$Track_Angle) / pi), 
+  spdmin = spdmin, spdmax = spdmax, spdres = spdres, dirres = dirres,  title_name = "Migration distribution vehicle")
+```
+
+```{r}
+population %>% 
+  group_by(Metadata_id, Metadata_condition, Metadata_dose) %>%
+  summarise(max_speed = max(Track_Speed))
+```

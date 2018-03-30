@@ -169,7 +169,7 @@ valid_tracks_all <- population %>%
   na.omit() %>%
   summarise(Fraction_valid_tracks = sum(Track_Valid) / n()) %>% 
   mutate(Track_Sector = "all") %>%
-select(ID, Track_Sector, everything()) %>%
+  select(ID, Track_Sector, everything(.)) %>%
   print
 
 valid_tracks <- bind_rows(valid_tracks,valid_tracks_all) %>% 

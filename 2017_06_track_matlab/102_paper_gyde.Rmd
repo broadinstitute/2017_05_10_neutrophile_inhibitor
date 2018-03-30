@@ -1,0 +1,419 @@
+---
+title: "Working title: CP17 migration data"
+author: "TB"
+date: "9/9/2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("tidyverse")
+source("../windrose.r")
+library("magrittr")
+```
+
+
+
+# Input data 
+* The tracking data is stored in the file clean_tracks.csv.
+* The normalized data is stored in the file clean_normalized.csv. Normalization can be found in 04_normalize.Rmd
+
+```{r}
+csv_tracks <- 'clean_tracks.csv'
+csv_normalized <- 'clean_normalized.csv'
+analysis_folder <- '../../../analysis/2017_04_28_matlab'
+```
+
+# Output folder
+```{r}
+image_folder <- file.path(analysis_folder, "image_data")
+```
+
+Definition of the grouping variables. 
+```{r}
+strata <- c('Metadata_condition','Metadata_dose','Metadata_id','Metadata_date','Metadata_matrix')
+```
+
+Tracking and normalized data is loaded as a data frame, sorted and ordered 
+```{r}
+tracks <- read_csv(file.path(analysis_folder, csv_tracks)) %>%
+  select(Metadata_id,Metadata_matrix, Metadata_condition, Metadata_dose, everything() ) %>%
+  arrange(Metadata_id, Metadata_matrix, Metadata_condition, Metadata_dose) %>%
+  group_by_(.dots = strata) 
+
+normalized <- read_csv(file.path(analysis_folder, csv_normalized)) %>%
+  select(Metadata_id,Metadata_matrix, Metadata_condition, Metadata_dose, everything() ) %>%
+  arrange(Metadata_id, Metadata_matrix, Metadata_condition, Metadata_dose) %>%
+  group_by_(.dots = strata)  %>%
+  filter(Track_Length > 19)
+```
+
+Small trajectories are removed and the angles are scaled to [-pi, pi] and rotated 
+(using neutrominer::track the angles were calculated with 0 degree set to three o 
+clock, now we rotate zero 12 )
+
+Small trajectories of neutrophils that are observred less than 20 frames are removed. 
+```{r}
+# angles are scaled to the intervale (-pi, pi)
+population <- tracks %>%
+  mutate(Track_Angle = Track_Angle + pi/2) %>% # rotate all angles by 90 degree or pi/2
+  mutate(Track_Angle = ifelse(Track_Angle > pi, Track_Angle - 2*pi, Track_Angle) ) %>%
+  mutate(Track_Angle = ifelse(Track_Angle < 0, Track_Angle + 2*pi, Track_Angle) ) 
+```
+
+## Quality 
+To analyse the tracking quality we use cytominer::assess(). To compare the results of 
+all migration run in FN and HEM we use the VOT (valid observation time). 
+
+```{r}
+quality <- tracks %>% 
+  neutrominer::assess(min_path_length = 19)
+
+quality %>% print
+
+
+quality %>% 
+  ungroup() %>%
+  group_by(Metadata_matrix) %>% 
+  summarise(mean_VOT = mean(VOT), sd_VOT = sd(VOT)) %>% 
+  print()
+```
+
+Lets visually compare the results from both matrices
+```{r}
+ggplot(data = quality %>% filter(Metadata_matrix == 'FN'), 
+       aes(x = VOT, y = Exp_Valid_Tracks, color = Metadata_id, shape = Metadata_condition)) +
+  geom_point() +
+  coord_cartesian(xlim = c(0, 1)) +
+  ggtitle("Track Quality for migration in FN (high VOT is good)")
+  
+ggplot(data = quality %>% filter(Metadata_matrix == 'HEM'), 
+       aes(x = VOT, y = Exp_Valid_Tracks, color = Metadata_id, shape = Metadata_condition)) +
+  geom_point() +
+  coord_cartesian(xlim = c(0, 1)) + 
+  ggtitle("Track Quality for migration in HEM (high VOT is good)")
+
+ggsave(file.path(image_folder, "track_quality_vot_hem.pdf"), plot = last_plot(), device = NULL, path = NULL,
+  scale = 1, width = NA, height = NA, units = c("in", "cm", "mm"),
+  dpi = 300, limitsize = TRUE)
+
+```
+
+Which patient ids belong to the migrations run in HEM?
+```{r}
+ids_cp17 <- tracks %>% 
+  filter(Metadata_condition == "CP17", Metadata_matrix == "HEM") %>%
+  ungroup() %>% 
+  group_by(Metadata_id) %>% 
+  slice(1) %>%
+  extract2("Metadata_id") %>% 
+  print
+
+ids_sp17 <- tracks %>% 
+  filter(Metadata_condition == "SP17", Metadata_matrix == "HEM") %>%
+  ungroup() %>% 
+  group_by(Metadata_id) %>% 
+  slice(1) %>%
+  extract2("Metadata_id") %>% 
+  print
+
+```
+
+## Migration analysis
+
+We look at the distribution of the direction and speed of the neutrophils run in HEM. 
+Each condition (CP17, SP17, control and vehicle) is plotted separately.
+
+## Remove clutter
+We remove all short trajectories and transform the speed from µm/min to µm/sec.
+```{r}
+test_data <- population %>%
+  filter(Metadata_matrix == "HEM", Track_Length > 19) %>% 
+  mutate(Track_Speed = Track_Speed / 60)
+```
+
+Define parameters for the windrose plot
+```{r}
+spdmin <- 0
+spdmax <- 0.3
+spdres <- 0.02
+dirres <- 90
+```
+
+Distribution of speed and angle for control and vehicle distribution.
+```{r}
+controls <- test_data %>% 
+  filter(Metadata_condition == "control") 
+
+vehicle <- test_data %>% 
+  filter(Metadata_condition == "vehicle") 
+
+
+h1 <- plot.windrose(spd = controls$Track_Speed, dir = (180 * (controls$Track_Angle) / pi),
+  spdmin = spdmin, spdmax = spdmax, spdres = spdres, dirres = dirres, title_name = "Angle and speed distribution for migration in HEM (control)")
+
+ggsave(file.path(image_folder, "windrose_hem_control.pdf"), plot = last_plot(), device = NULL, path = NULL,
+  scale = 1, width = NA, height = NA, units = c("in", "cm", "mm"),
+  dpi = 300, limitsize = TRUE)
+
+h2 <- plot.windrose(spd = vehicle$Track_Speed, dir = (180 * (vehicle$Track_Angle) / pi), 
+  spdmin = spdmin, spdmax = spdmax, spdres = spdres, dirres = dirres,  title_name = "Angle and speed distribution for migration in HEM (vehicle)")
+
+ggsave(file.path(image_folder, "windrose_hem_vehicle.pdf"), plot = last_plot(), device = NULL, path = NULL,
+  scale = 1, width = NA, height = NA, units = c("in", "cm", "mm"),
+  dpi = 300, limitsize = TRUE)
+```
+
+Distribution of speed and angle for CP17 / SP17 and dose 0.5.
+```{r}
+CP17 <- test_data %>% 
+  filter(Metadata_condition == "CP17") %>%
+  filter(Metadata_dose == 0.5) 
+
+SP17 <- test_data %>% 
+  filter(Metadata_condition == "SP17") %>%
+  filter(Metadata_dose == 0.5) 
+
+
+h <- plot.windrose(spd = CP17$Track_Speed, dir = (180 * (CP17$Track_Angle) / pi), 
+  spdmin = spdmin, spdmax = spdmax, spdres = spdres, dirres = dirres, title_name = "Angle and speed distribution for migration in HEM with  CP17, dose 0.5)")
+
+ggsave(file.path(image_folder, "windrose_hem_CP17_0.5.pdf"), plot = last_plot(), device = NULL, path = NULL,
+  scale = 1, width = NA, height = NA, units = c("in", "cm", "mm"),
+  dpi = 300, limitsize = TRUE)
+
+
+h <- plot.windrose(spd = SP17$Track_Speed, dir = (180 * (SP17$Track_Angle) / pi), 
+  spdmin = spdmin, spdmax = spdmax, spdres = spdres, dirres = dirres, title_name = "Angle and speed distribution for migration in HEM with  SP17, dose 0.5)")
+
+ggsave(file.path(image_folder, "windrose_hem_SP17_0.5.pdf"), plot = last_plot(), device = NULL, path = NULL,
+  scale = 1, width = NA, height = NA, units = c("in", "cm", "mm"),
+  dpi = 300, limitsize = TRUE)
+
+```
+```{r}
+CP17 <- test_data %>% 
+  filter(Metadata_condition == "CP17") %>%
+  filter(Metadata_dose == 5) 
+
+SP17 <- test_data %>% 
+  filter(Metadata_condition == "SP17") %>%
+  filter(Metadata_dose == 5) 
+
+
+h <- plot.windrose(spd = CP17$Track_Speed, dir = (180 * (CP17$Track_Angle) / pi), 
+  spdmin = spdmin, spdmax = spdmax, spdres = spdres, dirres = dirres, title_name = "Angle and speed distribution for migration in HEM with  CP17, dose 5)")
+
+ggsave(file.path(image_folder, "windrose_hem_CP17_5.pdf"), plot = last_plot(), device = NULL, path = NULL,
+  scale = 1, width = NA, height = NA, units = c("in", "cm", "mm"),
+  dpi = 300, limitsize = TRUE)
+
+
+h <- plot.windrose(spd = SP17$Track_Speed, dir = (180 * (SP17$Track_Angle) / pi), 
+  spdmin = spdmin, spdmax = spdmax, spdres = spdres, dirres = dirres, title_name = "Angle and speed distribution for migration in HEM with  SP17, dose 5)")
+
+ggsave(file.path(image_folder, "windrose_hem_SP17_5.pdf"), plot = last_plot(), device = NULL, path = NULL,
+  scale = 1, width = NA, height = NA, units = c("in", "cm", "mm"),
+  dpi = 300, limitsize = TRUE)
+
+```
+
+```{r}
+CP17 <- test_data %>% 
+  filter(Metadata_condition == "CP17") %>%
+  filter(Metadata_dose == 50) 
+
+SP17 <- test_data %>% 
+  filter(Metadata_condition == "SP17") %>%
+  filter(Metadata_dose == 50) 
+
+
+h <- plot.windrose(spd = CP17$Track_Speed, dir = (180 * (CP17$Track_Angle) / pi), 
+  spdmin = spdmin, spdmax = spdmax, spdres = spdres, dirres = dirres, title_name = "Angle and speed distribution for migration in HEM with  CP17, dose 50)")
+
+ggsave(file.path(image_folder, "windrose_hem_CP17_50.pdf"), plot = last_plot(), device = NULL, path = NULL,
+  scale = 1, width = NA, height = NA, units = c("in", "cm", "mm"),
+  dpi = 300, limitsize = TRUE)
+
+
+h <- plot.windrose(spd = SP17$Track_Speed, dir = (180 * (SP17$Track_Angle) / pi), 
+  spdmin = spdmin, spdmax = spdmax, spdres = spdres, dirres = dirres, title_name = "Angle and speed distribution for migration in HEM with  SP17, dose 50)")
+
+ggsave(file.path(image_folder, "windrose_hem_SP17_50.pdf"), plot = last_plot(), device = NULL, path = NULL,
+  scale = 1, width = NA, height = NA, units = c("in", "cm", "mm"),
+  dpi = 300, limitsize = TRUE)
+
+```
+
+
+We calculate the fration of tracks migrating in each direction.
+```{r}
+sector_fraction <- normalized %>% 
+  filter(Metadata_matrix == "HEM") %>%
+  group_by_(.dots = strata) %>%
+  summarise(positive = sum(Track_Positive_Sector) / n(),
+            negative = sum(Track_Negative_Sector) / n(),
+            neutral_up = sum(Track_Neutral_Sector_Up) / n(),
+            neutral_down = sum(Track_Neutral_Sector_Down) / n()
+    )
+
+sector_fraction_condition <- sector_fraction %>%
+  ungroup() %>%
+  group_by(Metadata_matrix) %>%
+  summarise(mean_positive = mean(positive),
+            sd_positive = sd(positive),
+            mean_negative = mean(negative),
+            sd_negative = sd(negative),
+            mean_neutral_up = mean(neutral_up),
+            sd_neutral_up = sd(neutral_up),
+            mean_neutral_down = mean(neutral_down),
+            sd_neutral_down = sd(neutral_down)
+            ) %>%
+  print
+```
+
+Do we see a difference in the conditions? 
+ 
+
+```{r}
+sector_fraction_condition <- sector_fraction %>%
+  ungroup() %>%
+  group_by(Metadata_matrix, Metadata_condition, Metadata_dose) %>%
+  summarise(mean_positive = mean(positive),
+            sd_positive = sd(positive),
+            mean_negative = mean(negative),
+            sd_negative = sd(negative),
+            mean_neutral_up = mean(neutral_up),
+            sd_neutral_up = sd(neutral_up),
+            mean_neutral_down = mean(neutral_down),
+            sd_neutral_down = sd(neutral_down)
+            ) %>%
+  print
+
+```
+## Comparison of all sectors. 
+
+
+```{r}
+ttest_speed_with_dose <- function(dose){
+cp <- normalized %>%
+  filter(Metadata_condition == "CP17", Metadata_matrix == "HEM", Metadata_dose == dose) 
+sp <- normalized %>%
+  filter(Metadata_condition == "SP17", Metadata_matrix == "HEM", Metadata_dose == dose)
+return(t.test(cp$Track_Speed, sp$Track_Speed))
+}
+
+speed_dose_p_values <- lapply(c(0.5,5,50), ttest_speed_with_dose) %>% print
+
+```
+
+```{r}
+
+ttest_dose_sector <- function(dose, sector, feature){
+cp <- normalized %>%
+  filter(Metadata_condition == "CP17") %>%
+  filter(Metadata_matrix == "HEM") %>% 
+  filter(Metadata_dose == dose) %>%
+  filter(Track_Sector == sector) %>% 
+  extract2(feature)
+
+sp <-  normalized %>%
+  filter(Metadata_condition == "SP17") %>%
+  filter(Metadata_matrix == "HEM") %>% 
+  filter(Metadata_dose == dose) %>%
+  filter(Track_Sector == sector) %>% 
+  extract2(feature)
+
+t <- t.test(cp, sp)
+return(t$p.value)
+}
+
+
+
+p_values <- rbind(
+c("Track_Speed",1,sapply(c(0.5, 5, 50), ttest_dose_sector, sector = 1, feature = "Track_Speed")),
+c("Track_Speed",2,sapply(c(0.5, 5, 50), ttest_dose_sector, sector = 2, feature = "Track_Speed")),
+c("Track_Directionality",1,sapply(c(0.5, 5, 50), ttest_dose_sector, sector = 1, feature = "Track_Directionality")), 
+c("Track_Directionality",2,sapply(c(0.5, 5, 50), ttest_dose_sector, sector = 2, feature = "Track_Directionality")),
+c("Track_xFMI",1,sapply(c(0.5, 5, 50), ttest_dose_sector, sector = 1, feature = "Track_xFMI")),
+c("Track_xFMI",2,sapply(c(0.5, 5, 50), ttest_dose_sector, sector = 2, feature = "Track_xFMI")),
+c("Track_yFMI",1,sapply(c(0.5, 5, 50), ttest_dose_sector, sector = 1, feature = "Track_yFMI")),
+c("Track_yFMI",2,sapply(c(0.5, 5, 50), ttest_dose_sector, sector = 2, feature = "Track_yFMI")),
+c("Track_CI",1,sapply(c(0.5, 5, 50), ttest_dose_sector, sector = 1, feature = "Track_CI")),
+c("Track_CI",2,sapply(c(0.5, 5, 50), ttest_dose_sector, sector = 2, feature = "Track_CI"))
+  
+)
+
+colnames(p_values) <- c("feature","sector","dose 0.5","dose 5", "dose 50")
+
+p_values %>% print
+
+```
+
+```{r}
+
+ttest_dose_sector_complete <- function(dose, sector, feature){
+cp <- population %>%
+  filter(Metadata_condition == "CP17") %>%
+  filter(Metadata_matrix == "HEM") %>% 
+  filter(Metadata_dose == dose) %>%
+  filter(Track_Sector == sector) %>% 
+  extract2(feature)
+
+sp <-  population %>%
+  filter(Metadata_condition == "SP17") %>%
+  filter(Metadata_matrix == "HEM") %>% 
+  filter(Metadata_dose == dose) %>%
+  filter(Track_Sector == sector) %>% 
+  extract2(feature)
+
+t <- t.test(cp, sp)
+return(t)
+}
+
+ttest_dose_sector_complete(5, 2, "Track_yFMI")
+```
+```{r}
+population %>% 
+  filter(Metadata_matrix == "HEM") %>%
+  filter(Metadata_dose == 5) %>%
+  group_by_(.dots = strata) %>%
+  select(Track_xFMI, Track_yFMI, Track_Distance_Traveled) %>%
+  summarise_all(.funs = mean)
+```
+
+```{r}
+ggplot(data = tracks %>% filter(Track_Length > 19), aes(x = Track_xPos, y = Track_xFMI)) + geom_point()
+
+ggplot(data = tracks %>% filter(Track_Length > 19), aes(x = Track_xPos, y = Track_Speed)) + geom_point()
+
+```
+```{r}
+lin_model <- lm(formula = Track_xPos ~ Track_Directionality, data = tracks %>% filter(Track_Length > 19)) 
+summary(lin_model)
+```
+
+We collapse all values to experiments 
+```{r}
+collapsed <- normalized %>% 
+  filter(Track_Length > 19) %>%
+  ungroup %>% 
+  select(-Metadata_id ) %>%
+  group_by(Metadata_matrix, Metadata_condition, Metadata_dose ) %>%
+  summarise_all(.funs = mean) %>% 
+  print
+
+
+ggplot(data = collapsed %>%  
+    filter(Metadata_matrix == "FN") %>%
+    filter(Metadata_condition %in% c("CP17","SP17","control"))) + 
+  aes(x = Track_Speed, y = Track_xFMI, shape = factor(Metadata_condition), color = Metadata_dose )  +
+  geom_point()
+
+ggplot(data = collapsed %>%  
+    filter(Metadata_matrix == "HEM") %>%
+    filter(Metadata_condition %in% c("CP17","SP17","control"))) + 
+  aes(x = Track_Speed, y = Track_xFMI, shape = factor(Metadata_condition), color = Metadata_dose )  +
+  geom_point()
+
+```

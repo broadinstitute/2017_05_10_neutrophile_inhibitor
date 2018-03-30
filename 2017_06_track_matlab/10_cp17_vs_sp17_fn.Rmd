@@ -157,7 +157,7 @@ Analysis of migration run FN with inhibitor CP17 vs. control experiment run with
 * CP17 and SP17 differ significantly with  p-value = 8.563e-06
 
 ```{r}
-ttest_dose(feature = "Track_Speed", dose = 50)
+ttest_dose(feature = "Track_Speed", dose = 5)
 ```
 
 ### Summary Track_Directionality
@@ -166,7 +166,7 @@ ttest_dose(feature = "Track_Speed", dose = 50)
 * CP17 has an significantly decreased directionality with p-value = 0.01268
 
 ```{r}
-ttest_dose(feature = "Track_Directionality", dose = 50
+ttest_dose(feature = "Track_Directionality", dose = 5
   )
 ```
 ### Summary Track_xFMI
@@ -394,4 +394,22 @@ normalized %>%
   summarise(n = n())
   print
 ```
+```{r}
+postprocessed <- read_csv(file.path(analysis_folder,'clean_tracks.csv')) %>% 
+  group_by_(.dots = strata)
 
+quality <- postprocessed %>% 
+  group_by_(.dots = strata) %>%
+    neutrominer::assess(.,min_path_length = 20) %>% 
+  print
+
+quality %>% 
+  ungroup() %>%
+  group_by(Metadata_matrix) %>%
+  filter(
+    !((Metadata_id %in% id_hem) & (Metadata_matrix == "FN")), 
+    Metadata_dose != 0.5, 
+      Metadata_condition != 'control') %>%
+  summarise(VOT = mean(VOT))
+
+```
