@@ -1,0 +1,370 @@
+---
+title: "load_data"
+author: "TB"
+date: "07/07/2017"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("tidyverse")
+library("magrittr")
+source("../multiplot.r")
+```
+# How does different normalization schemes affect our tracking data 
+This notebooks compares the effect of different peptides to the chemotaxis of neutrophiles.
+
+Our data set consists of cell tracking data run with different conditions.
+
+Each time series characterizes the chemotaxis of neutrophils in an in vitro assay. In the analysed experiments the chemoattractant interleukin 8 was used to create an gradient that directs from the left border of the images / channel to the left channel.
+For each patient or experiment id ("Metadata_id") a set of five (FN) or six (HEM) time series were recorded consisting of 
+* one control run, "Metadata_condition" = "control"
+* one vehicle run, "Metadata_condition" = "vehicle"
+* three runs with "Metadata_condition" "CP17" or "SP17" in with different doses Metadata_dose = c(0.5, 5, 50)
+
+The experiments for each patient are either run in the matrix HEM or FN specified as "Metadata_matrix" = "FN" or "HEM". For all patients that have been run in HEM, one additional run with "Metadata_condition" = "vehicle" was run using the matrix "FN". 
+
+
+# Load data 
+Load tracking data created using MATLAB. 
+```{r}
+csv_tracks <- 'clean_tracks.csv'
+csv_normalized <- 'clean_normalized.csv'
+analysis_folder <- '../../../analysis/2017_04_28_matlab/'
+
+df <- read_csv(file.path(analysis_folder, csv_tracks)) %>%
+  filter(Track_Length > 19) 
+```
+Experiments are groupes by condition, dose, id, data and matrix
+```{r}
+# grouping variables 
+strata <- c('Metadata_condition','Metadata_dose','Metadata_id','Metadata_date','Metadata_matrix')
+```
+
+List all IDs and the matrix used in this experiment (either HEM or FN).
+```{r}
+df_id_matrix <- df %>%
+  filter(Metadata_condition == "control") %>%
+  select(Metadata_id, Metadata_matrix) %>%
+  group_by(Metadata_id) %>%
+  slice(1) %>%
+  print
+```
+We define the variables for normalization 
+```{r}
+feature_var = c(
+  "Track_Speed",
+  "Track_Speed_Y",
+  "Track_Speed_X",
+  "Track_xFMI",
+  "Track_yFMI",
+  "Track_Directionality",
+  "Track_Distance_Traveled","Track_CI"
+  )
+```
+
+Remove data set bd0055 (technical error, very few cells at the "gate" of the channel).
+```{r}
+population <- df %>%
+  filter(Metadata_id != "bd0055") %>% 
+  filter(Metadata_id != "gn0017")
+```
+
+# Normalize against vehicle group
+All experiments run in HEM. For each ID (Metadata_id) six experiments were run either using SP17 or CP17
+1. SP17 / CP17 with dose 0.5
+2. SP17 / CP17 with dose 5
+3. SP17 / CP17 with dose 50
+4. Control
+5. Vehicle
+6. Vehicle using matrix FN
+
+## Define control population
+To normalize against Vehicle, all vehicle runs in FN are removed from the 
+sample group used for normalization. First, we list all IDs run in HEM.
+```{r}
+# define control group
+id_hem <- df_id_matrix %>%
+  filter(Metadata_matrix == "HEM") %>%
+  extract2("Metadata_id") %>% 
+  print 
+```
+
+```sample``` defines the population used for normalization. For all IDs run
+in HEM, the vehicle migratons run in FN are removed.
+```{r}
+sample <- population %>% 
+  filter(Metadata_condition == "vehicle") %>%
+  filter( !((Metadata_id %in% id_hem) & (Metadata_matrix == "FN") ))
+```
+
+## Create normalized profiles.
+```{r}
+normalized <-
+  cytominer::normalize(
+    population = population %>% 
+       filter( !((Metadata_id %in% id_hem) & (Metadata_matrix == "FN") )),
+    variables = feature_var,
+    strata =  "Metadata_id",
+    sample = sample,
+    operation = "standardize"
+  ) 
+```
+
+Optional: Profiles are collapsed to sectors
+```{r}
+sectors <- 
+  cytominer::aggregate(
+    population = normalized,
+    variables = feature_var,
+    strata  = c("Metadata_matrix","Metadata_id", "Metadata_condition", "Metadata_dose","Track_Sector"),
+    operation = "mean" 
+  )
+```
+
+# Results
+
+## Differences SP17 vs CP17
+
+ttest_dose is a wrapper function for a ttest.
+```{r}
+ttest_dose <- function(dose = 5, feature = "Track_Speed", matrix = "FN"){
+cp <- normalized %>%
+  filter(Metadata_condition == "CP17") %>%
+  filter(Metadata_matrix == matrix) %>% 
+  filter(Metadata_dose == dose) %>%
+  extract2(feature)
+
+sp <-  normalized %>%
+  filter(Metadata_condition == "SP17") %>%
+  filter(Metadata_matrix == matrix) %>% 
+  filter(Metadata_dose == dose) %>%
+  extract2(feature)
+
+t <- t.test(cp, sp)
+return(t)
+}
+```
+
+## CP17 vs SP17 
+Analysis of migration run FN with inhibitor CP17 vs. control experiment run with SP17.
+
+### Summary Track_Speed
+* Migration in CP17 is 44% slower compared to the vehicle experiments 
+* Migration in SP17 is 17% faster compared to vehicle 
+* CP17 and SP17 differ significantly with  p-value = 8.563e-06
+
+```{r}
+ttest_dose(feature = "Track_Speed")
+```
+
+### Summary Track_Directionality
+* Migration in CP17 shows an decrease of 29% compared to control
+* Migration in SP17 shows an increase of 4% compared to control
+* CP17 has an significantly decreased directionality with p-value = 0.01268
+
+```{r}
+ttest_dose(feature = "Track_Directionality")
+```
+### Summary Track_xFMI
+* Migration in CP17 is decreased by 22%. As the xFMI is negative, the xFMI becomes even more directed! 
+* Migration in SP17 increased by 29%.
+* CP17 shows a significantly decreased xFMI compared to SP17 with 3.96e-06.
+```{r}
+#  
+population %>% 
+  filter(Metadata_dose == 5, Metadata_matrix == "FN") %>%
+  summarise(xFMI = mean(Track_xFMI))
+
+ttest_dose(feature = "Track_xFMI")
+
+```
+```{r}
+normalized %>% 
+   filter(Metadata_dose != 0.5, Metadata_condition != "control", Metadata_matrix == "FN")  %>%
+  group_by(Metadata_condition, Metadata_dose, Metadata_matrix) %>% 
+  summarise(mean_speed = mean(Track_Speed), median_speed = median(Track_Speed), n = n())
+```
+
+```{r}
+df <- 
+  normalized %>% 
+  filter(Metadata_dose != 0.5, Metadata_condition != "control", Metadata_matrix == "FN") 
+
+ggplot(data = df) +
+  aes(y = Track_Speed, fill = Metadata_condition, x = Metadata_dose) + 
+  geom_boxplot(notch = TRUE) 
+
+ggplot(data = df) +
+  aes(y = Track_Directionality, fill = Metadata_condition, x = Metadata_dose) + 
+  geom_boxplot(notch = TRUE) 
+
+ggplot(data = df) +
+  aes(y = Track_xFMI, fill = Metadata_condition, x = Metadata_dose) + 
+  geom_boxplot(notch = TRUE) 
+
+```
+
+```{r}
+ttest_dose_sector_complete <- function(dose = 5, sector = 1, feature = "Track_Speed", matrix = "FN"){
+cp <- normalized %>%
+  filter(Metadata_condition == "CP17") %>%
+  filter(Metadata_matrix == matrix) %>% 
+  filter(Metadata_dose == dose) %>%
+  filter(Track_Sector == sector) %>% 
+  extract2(feature)
+
+sp <-  normalized %>%
+   filter(Metadata_id != "bd0055") %>%
+  filter(Metadata_condition == "SP17") %>%
+  filter(Metadata_matrix == matrix) %>% 
+  filter(Metadata_dose == dose) %>%
+  filter(Track_Sector == sector) %>% 
+  extract2(feature)
+
+t <- t.test(cp, sp)
+return(t)
+}
+```
+## Sectoranalysis
+```{r}
+ttest_dose_sector_complete(sector = 1, feature = "Track_Speed")
+ttest_dose_sector_complete(sector = 1, feature = "Track_Directionality")
+ttest_dose_sector_complete(sector = 1, feature = "Track_xFMI")
+```
+
+
+```{r}
+ttest_dose_sector_complete(sector = 2, feature = "Track_Speed")
+ttest_dose_sector_complete(sector = 2, feature = "Track_Directionality")
+ttest_dose_sector_complete(sector = 2, feature = "Track_xFMI")
+```
+We observe no difference in the number of trakcs in each sector. 
+```{r}
+sector_fraction <- normalized %>% 
+  filter(Metadata_matrix == "FN", Metadata_dose %in% c(50)) %>%
+  group_by_(.dots = strata) %>%
+  summarise(positive = sum(Track_Positive_Sector) / n(),
+            negative = sum(Track_Negative_Sector) / n(),
+            neutral_up = sum(Track_Neutral_Sector_Up) / n(),
+            neutral_down = sum(Track_Neutral_Sector_Down) / n()
+    ) %>% 
+  print
+
+t.test(
+  sector_fraction %>%
+  filter(Metadata_condition == "CP17") %>%
+  extract2("positive"),
+  sector_fraction %>%
+  filter(Metadata_condition == "SP17") %>%
+  extract2("positive")
+)
+
+t.test(
+  sector_fraction %>%
+  filter(Metadata_condition == "CP17") %>%
+  extract2("negative"),
+  sector_fraction %>%
+  filter(Metadata_condition == "SP17") %>%
+  extract2("negative")
+)
+```
+## Sneaker, walker, runner 
+Now we define slow, normal and fast cells as sneaker, walker and runner. 
+```{r}
+quantiles <- normalized %>% 
+  filter(Metadata_condition == "vehicle") %>%
+  filter(Metadata_matrix == "FN") %>%
+  extract2("Track_Speed") %>%
+  quantile(.,probs = c(.25, .75)) %>% 
+  as.vector()
+```
+
+Summary:
+* Sneaker
+  * more snekaer in CP17 with dose = 5    0.0767
+                          and dose = 50   0.0057
+* Walker
+  * more walker in CP17 with dose = 5     0.1708
+  * more walker in SP17 with dose = 50    0.0551
+* Runner
+  * more runner in SP17 with dose = 5     0.0004
+                         and dose = 50    0.6376
+```{r}
+movements <- normalized %>% 
+  filter(Metadata_matrix == "FN", Metadata_dose != 0.5) %>%
+  mutate(sneaker = (Track_Speed < quantiles[[1]])) %>%
+  mutate(walker = ( (Track_Speed > quantiles[[1]] )  & ( Track_Speed < quantiles[[2]] ) ) )  %>%
+  mutate(runner = (Track_Speed > quantiles[[2]])) %>%
+  print
+
+movements %>%  
+  ungroup() %>% 
+  group_by(Metadata_dose, Metadata_condition) %>%
+  summarise(mean_sneaker = mean(sneaker), #sd_sneaker = sd(sneaker),
+            mean_walker = mean(walker), #sd_walker = sd(walker),
+            mean_runner = mean(runner), #sd_runner = sd(runner), 
+            n = n()
+    )
+```
+Which of these differences is significant?
+```{r}
+t.test(
+  movements %>% filter(Metadata_dose == 5, Metadata_condition == "SP17") %>% extract2("sneaker"), 
+  movements %>% filter(Metadata_dose == 5, Metadata_condition == "CP17") %>% extract2("sneaker")
+)$p.value
+
+t.test(
+  movements %>% filter(Metadata_dose == 50, Metadata_condition == "SP17") %>% extract2("sneaker"), 
+  movements %>% filter(Metadata_dose == 50, Metadata_condition == "CP17") %>% extract2("sneaker")
+)$p.value
+
+t.test(
+  movements %>% filter(Metadata_dose == 5, Metadata_condition == "SP17") %>% extract2("walker"), 
+  movements %>% filter(Metadata_dose == 5, Metadata_condition == "CP17") %>% extract2("walker")
+)$p.value
+
+t.test(
+  movements %>% filter(Metadata_dose == 50, Metadata_condition == "SP17") %>% extract2("walker"), 
+  movements %>% filter(Metadata_dose == 50, Metadata_condition == "CP17") %>% extract2("walker")
+)$p.value
+
+t.test(
+  movements %>% filter(Metadata_dose == 5, Metadata_condition == "SP17") %>% extract2("runner"), 
+  movements %>% filter(Metadata_dose == 5, Metadata_condition == "CP17") %>% extract2("runner")
+)$p.value
+
+t.test(
+  movements %>% filter(Metadata_dose == 50, Metadata_condition == "SP17") %>% extract2("runner"), 
+  movements %>% filter(Metadata_dose == 50, Metadata_condition == "CP17") %>% extract2("runner")
+)$p.value
+```
+
+```{r}
+population %>% 
+  group_by(Metadata_id, Metadata_condition) %>% 
+  filter(Metadata_matrix == "FN") %>% 
+  summarise(mean_xfmi = mean(Track_xFMI)) 
+```
+```{r}
+normalized %>% 
+  filter(Metadata_condition == "CP17") %>% 
+    ggplot(data = .) +
+  aes(x = Metadata_dose, y = Track_Speed, fill = Metadata_matrix) +
+  geom_boxplot()
+
+normalized %>% 
+  filter(Metadata_condition == "CP17") %>% 
+    ggplot(data = .) +
+  aes(x = Metadata_dose, y = Track_Directionality, fill = Metadata_matrix) +
+  geom_boxplot()
+
+normalized %>% 
+  filter(Metadata_condition == "CP17") %>% 
+    ggplot(data = .) +
+  aes(x = Metadata_dose, y = Track_xFMI, fill = Metadata_matrix) +
+  geom_boxplot()
+
+```
