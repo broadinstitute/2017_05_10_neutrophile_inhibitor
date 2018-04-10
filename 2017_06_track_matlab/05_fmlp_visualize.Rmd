@@ -1,0 +1,203 @@
+---
+title: "load_data"
+author: "TB"
+date: "07/07/2017"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("tidyverse")
+library("magrittr")
+library('gridExtra')
+library('grid')
+library('gtable')
+```
+
+
+# Load data 
+
+
+```{r}
+csv_tracks <- 'clean_tracks.csv'
+csv_normalized <- 'clean_normalized.csv'
+
+analysis_folder <- '/Users/tbecker/Documents/2017_05_10_neutrophile_inhibitor/workspace/analysis/2018_fmlp'
+
+# grouping variable
+strata <- c('Metadata_condition','Metadata_dose','Metadata_id',
+            'Metadata_date','Metadata_matrix','Metadata_chemokine')
+
+
+```
+
+# load data 
+We load the data and
+* update the Metadata for one experiment
+* remove short trajectories 
+```{r} 
+population <- read_csv(file.path(analysis_folder, csv_normalized)) %>%
+  mutate(Metadata_condition = replace(Metadata_condition, Metadata_condition == "water", "vehicle")) %>%
+  filter(Track_Length > 19) %>%
+  mutate(Metadata_dose = ifelse(is.na(Metadata_dose), "none", Metadata_dose))
+
+population %>% group_by(Metadata_condition, Metadata_dose) %>% summarise(m_speed = mean(Track_Speed))
+```
+
+```{r}
+
+results <- population %>% 
+  group_by(Metadata_dose, Metadata_condition) %>% 
+  summarise(
+    n = n(),
+    mean_speed = mean(Track_Speed),
+    sem_speed = sd(Track_Speed) / sqrt(n()),
+    sd_speed = sd(Track_Speed),
+    mean_directionality  = mean(Track_Directionality),
+    sem_directionality = sd(Track_Directionality) / sqrt(n()),
+    sd_directionality = sd(Track_Directionality),
+    mean_xfmi = mean(Track_xFMI),
+    sem_xfmi = sd(Track_xFMI) / sqrt(n()),
+    sd_xfmi = sd(Track_xFMI)
+    ) %>% print
+
+write_csv(results, file.path(analysis_folder,'results.csv'))
+
+```
+```{r}
+# to change number of lines see 
+# https://stackoverflow.com/questions/24845652/specifying-the-scale-for-the-density-in-ggplot2s-stat-density2d
+ggplot( data = population %>% filter(Metadata_dose != 50)) +  
+  aes(x = Track_Speed, y = Track_Directionality, color = Metadata_condition) + 
+  geom_point() + 
+  facet_wrap( ~ Metadata_id)
+```
+```{r}
+results_per_id <- population %>% 
+  group_by(Metadata_id, Metadata_condition, Metadata_dose) %>% 
+  summarise(
+    n = n(),
+    mean_speed = mean(Track_Speed),
+    sem_speed = sd(Track_Speed) / sqrt(n()),
+    sd_speed = sd(Track_Speed),
+    mean_directionality  = mean(Track_Directionality),
+    sem_directionality = sd(Track_Directionality) / sqrt(n()),
+    sd_directionality = sd(Track_Directionality),
+    mean_xfmi = mean(Track_xFMI),
+    sem_xfmi = sd(Track_xFMI) / sqrt(n()),
+    sd_xfmi = sd(Track_xFMI)
+    ) %>% print
+
+```
+
+
+```{r}
+ggplot(data = results) + 
+  aes(x = mean_speed, y = mean_directionality, color = Metadata_dose, shape = as.factor(Metadata_condition) ) + 
+  geom_point()
+```
+# https://stackoverflow.com/questions/8545035/scatterplot-with-marginal-histograms-in-ggplot2a
+# https://stackoverflow.com/questions/17370853/align-ggplot2-plots-vertically/17371177#17371177
+
+```{r}
+hist_top <- ggplot( data = population %>% filter(Metadata_dose != 50, Metadata_condition != "SP17") ) + 
+  aes(x = Track_Speed,color = Metadata_condition ) +
+  geom_density() +    
+  theme(legend.position = "none",          
+       axis.title.x = element_blank(),
+       #axis.title.y = element_blank(),
+       #axis.text.x = element_blank(),
+       #axis.text.y = element_blank() 
+       plot.margin = unit(c(3,-5.5,4,2), "mm")
+    ) + 
+  xlim(-2.5,2) + 
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 2), limits = c(0,1))
+   
+
+empty <- ggplot() + 
+  geom_point(aes(1,1), colour = "white") +
+  theme(axis.ticks = element_blank(), 
+       panel.background = element_blank(), 
+       axis.text.x = element_blank(), axis.text.y = element_blank(),           
+       axis.title.x = element_blank(), axis.title.y = element_blank())
+
+main <- ggplot( data = population %>% filter(Metadata_dose != 50, Metadata_condition != "SP17") ) + 
+  aes(x = Track_Speed, y = Track_Directionality, color = Metadata_condition ) + 
+  geom_density_2d(bins = 5) + 
+  #stat_density_2d(aes(fill = ..level..,geom = "polygon")) + 
+  theme(legend.position = "none",        
+       #axis.title.x = element_blank(),
+       #axis.title.y = element_blank()
+       #axis.text.x = element_blank(),
+       #axis.text.y = element_blank()
+       plot.margin = unit(c(3,-5.5,4,3), "mm")
+    ) + 
+  xlim(-2.5,2) + 
+  ylim(-2, 2) + 
+  geom_point(size  = 0.1) + 
+  xlab("normalized speed") + 
+  ylab("normalized directionality") 
+
+hist_right <- ggplot( data = population %>% filter(Metadata_dose != 50, Metadata_condition != "SP17") ) + 
+  aes(x = Track_Directionality,color = Metadata_condition ) +
+  coord_flip() + 
+  geom_density() + 
+  theme(legend.position = "none",          
+       #axis.title.x = element_blank(),
+       axis.title.y = element_blank(),
+       #axis.text.x = element_blank(),
+       axis.text.y = element_blank(),
+       plot.margin = unit(c(3,0,4,3), "mm")
+    ) + 
+  xlim(-2, 2) + 
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 4), limits = c(0,1.1))
+
+g <- grid.arrange(hist_top, empty, main, hist_right, 
+  ncol = 2, nrow = 2, widths = c(5,1), heights = c(1,4))  
+```
+Which colors are used?
+https://stackoverflow.com/questions/8197559/emulate-ggplot2-default-color-palette
+red:    "#F8766D" 
+blue:   "#00BFC4"
+```{r}
+gg_color_hue <- function(n) {
+  hues = seq(15, 375, length = n + 1)
+  hcl(h = hues, l = 65, c = 100)[1:n]
+}
+n = 2
+cols = gg_color_hue(n)
+
+dev.new(width = 4, height = 4)
+plot(1:n, pch = 16, cex = 2, col = cols)
+
+```
+
+```{r}
+ggsave(file.path(analysis_folder,'density.png'),dpi = 300,g, width = 4, height = 4)
+```
+
+```{r}
+t.test(
+population %>% 
+  filter(Metadata_dose == 5, Metadata_condition == "CP17") %>%
+  extract2("Track_Directionality"),
+population %>% 
+  filter(Metadata_dose == 5, Metadata_condition == "SP17") %>%
+  extract2("Track_Directionality")
+)
+```
+
+
+```{r}
+t.test(
+population %>% 
+  filter(Metadata_dose == 5, Metadata_condition == "CP17") %>%
+  extract2("Track_Speed"),
+population %>% 
+  filter(Metadata_dose == 5, Metadata_condition == "SP17") %>%
+  extract2("Track_Speed")
+)
+```
+```
